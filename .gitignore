@@ -1,0 +1,28 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+.env
+
+# Local data and model weights must never be committed.
+data/
+models/
+ComfyUI/
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+
+# Local databases and generated artifacts.
+*.db
+*.sqlite3
+dist/
+build/
+
+# Editors and OS files.
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

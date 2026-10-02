@@ -1,0 +1,41 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "body-repair-ai"
+version = "0.1.0"
+description = "Local masked image restoration lab for automotive body parts"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=2.1",
+    "pillow>=11.0",
+    "pydantic>=2.10",
+    "pydantic-settings>=2.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.9",
+]
+web = [
+    "fastapi>=0.115",
+    "python-multipart>=0.0.20",
+    "uvicorn[standard]>=0.34",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/body_repair_ai"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
