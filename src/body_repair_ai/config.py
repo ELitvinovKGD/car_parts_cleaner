@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     comfyui_workflow: Path = Path("workflows/remove_dent.json")
     mask_threshold: int = Field(default=127, ge=0, le=255)
     mask_feather_radius: float = Field(default=8.0, ge=0.0, le=128.0)
+    crop_padding_ratio: float = Field(default=0.5, ge=0.0, le=3.0)
+    max_model_edge: int = Field(default=1024, ge=256, le=4096)
 
 
 def get_settings() -> Settings:

@@ -35,6 +35,8 @@ class JobRecord(BaseModel):
     result_path: Path | None = None
     backend: str = "mock"
     seed: int | None = None
+    crop_box: tuple[int, int, int, int] | None = None
+    model_input_size: tuple[int, int] | None = None
     error: str | None = None
 
     def transition(self, status: JobStatus, *, error: str | None = None) -> None:

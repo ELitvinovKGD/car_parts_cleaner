@@ -25,6 +25,7 @@ class DatasetStore:
             "rejected",
             "exports",
             "jobs",
+            "work",
         ):
             (self.root / name).mkdir(parents=True, exist_ok=True)
 
@@ -57,6 +58,11 @@ class DatasetStore:
 
     def candidate_path(self, job: JobRecord, attempt: int = 1) -> Path:
         path = self.root / "candidates" / str(job.id) / f"attempt-{attempt:03d}.png"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def work_path(self, job: JobRecord, filename: str) -> Path:
+        path = self.root / "work" / str(job.id) / filename
         path.parent.mkdir(parents=True, exist_ok=True)
         return path
 

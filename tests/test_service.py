@@ -23,6 +23,10 @@ def test_service_runs_and_reviews_job(tmp_path: Path) -> None:
 
     assert job.status is JobStatus.COMPLETED
     assert job.result_path and job.result_path.exists()
+    assert job.crop_box is not None
+    assert job.model_input_size is not None
+    assert job.model_input_size[0] % 64 == 0
+    assert job.model_input_size[1] % 64 == 0
     reviewed = service.review(str(job.id), accepted=True)
     assert reviewed.status is JobStatus.ACCEPTED
     assert (settings.data_dir / "accepted" / str(job.id) / "result.png").exists()
