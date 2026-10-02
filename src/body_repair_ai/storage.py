@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from shutil import copyfile
 
 from PIL import Image
 
@@ -68,3 +69,12 @@ class DatasetStore:
     def load_job(self, job_id: str) -> JobRecord:
         path = self.root / "jobs" / f"{job_id}.json"
         return JobRecord.model_validate(json.loads(path.read_text(encoding="utf-8")))
+
+    def review_job(self, job: JobRecord, *, accepted: bool) -> Path:
+        if job.result_path is None or not job.result_path.exists():
+            raise ValueError("Job has no result to review.")
+        collection = "accepted" if accepted else "rejected"
+        destination = self.root / collection / str(job.id) / "result.png"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        copyfile(job.result_path, destination)
+        return destination

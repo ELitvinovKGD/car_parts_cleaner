@@ -17,6 +17,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    "httpx>=0.28",
     "pytest>=8.3",
     "ruff>=0.9",
 ]
@@ -28,6 +29,12 @@ web = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/body_repair_ai"]
+
+[tool.hatch.build]
+include = [
+    "src/body_repair_ai/**/*.py",
+    "src/body_repair_ai/web_assets/*",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

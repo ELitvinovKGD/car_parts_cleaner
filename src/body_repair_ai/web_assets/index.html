@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Body Repair AI</title>
+    <link rel="stylesheet" href="/assets/styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <header>
+        <div>
+          <p class="eyebrow">Локальная лаборатория</p>
+          <h1>Body Repair AI</h1>
+          <p class="subtitle">Проверка inpainting-конвейера на кузовных деталях.</p>
+        </div>
+        <div class="status"><span></span> Данные остаются на этом компьютере</div>
+      </header>
+
+      <form id="job-form" class="panel">
+        <section class="inputs">
+          <label class="dropzone">
+            <strong>Исходная фотография</strong>
+            <span>PNG, JPEG или WebP до 25 МБ</span>
+            <input id="image" name="image" type="file" accept="image/png,image/jpeg,image/webp" required>
+            <img id="image-preview" alt="Предпросмотр оригинала">
+          </label>
+          <label class="dropzone mask-zone">
+            <strong>Маска дефекта</strong>
+            <span>Белое — изменить, чёрное — защитить</span>
+            <input id="mask" name="mask" type="file" accept="image/png,image/jpeg,image/webp" required>
+            <img id="mask-preview" alt="Предпросмотр маски">
+          </label>
+        </section>
+
+        <section class="controls">
+          <label>Операция
+            <select name="operation">
+              <option value="remove_dent">Убрать вмятину</option>
+              <option value="remove_dirt">Убрать грязь</option>
+              <option value="remove_scratch">Убрать царапину</option>
+            </select>
+          </label>
+          <button id="submit" type="submit">Создать тестовый результат</button>
+        </section>
+        <p id="message" role="status"></p>
+      </form>
+
+      <section id="result-panel" class="panel result-panel" hidden>
+        <div class="result-heading">
+          <div>
+            <p class="eyebrow">Результат</p>
+            <h2>Сравнение</h2>
+          </div>
+          <span id="backend-badge" class="badge"></span>
+        </div>
+        <div class="comparison">
+          <figure><img id="result-original" alt="До"><figcaption>До</figcaption></figure>
+          <figure><img id="result-image" alt="После"><figcaption>После</figcaption></figure>
+        </div>
+        <div class="review-actions">
+          <button type="button" class="secondary" data-review="false">Отклонить</button>
+          <button type="button" data-review="true">Принять в датасет</button>
+        </div>
+      </section>
+    </main>
+    <script src="/assets/app.js" defer></script>
+  </body>
+</html>
