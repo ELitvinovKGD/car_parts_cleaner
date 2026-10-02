@@ -1,7 +1,10 @@
 # ComfyUI workflows
 
-Экспортируйте проверенный workflow из ComfyUI в **API format** и сохраните JSON
-в этой папке. В нужных полях значений используйте точные placeholders:
+Готовый baseline находится в `sdxl_inpaint_api.json`. Он использует стандартные
+узлы ComfyUI и официальный checkpoint `sd_xl_base_1.0.safetensors`.
+
+Для собственных workflow экспортируйте граф из ComfyUI в **API format** и
+сохраните JSON в этой папке. В нужных полях значений используйте точные placeholders:
 
 - `{{IMAGE}}` — имя загруженного crop;
 - `{{MASK}}` — имя загруженной бинарной маски;

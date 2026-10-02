@@ -20,7 +20,7 @@ def image_bytes(mode: str, color: int | tuple[int, int, int]) -> bytes:
 
 
 def test_create_job_and_accept_result(tmp_path: Path) -> None:
-    app = create_app(Settings(data_dir=tmp_path / "data"))
+    app = create_app(Settings(data_dir=tmp_path / "data", inference_backend="mock"))
     client = TestClient(app)
 
     response = client.post(
@@ -44,3 +44,24 @@ def test_create_job_and_accept_result(tmp_path: Path) -> None:
     review = client.post(f"/api/jobs/{job['id']}/review", json={"accepted": True})
     assert review.status_code == 200
     assert review.json()["status"] == "accepted"
+
+
+def test_single_semantic_label_selects_specific_operation(tmp_path: Path) -> None:
+    app = create_app(Settings(data_dir=tmp_path / "data", inference_backend="mock"))
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/jobs",
+        data={"operation": "mixed_repair"},
+        files={
+            "image": ("original.png", image_bytes("RGB", (50, 60, 70)), "image/png"),
+            "annotation": (
+                "semantic.png",
+                image_bytes("RGB", (255, 0, 255)),
+                "image/png",
+            ),
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["operation"] == "remove_scratch"

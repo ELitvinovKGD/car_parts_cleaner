@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import secrets
+
 from PIL import Image
 
 from body_repair_ai.config import Settings
@@ -36,13 +38,18 @@ class RestorationService:
             threshold=self.settings.mask_threshold,
             feather_radius=self.settings.mask_feather_radius,
         )
-        job = JobRecord(operation=operation, backend=self.engine.name)
+        job = JobRecord(
+            operation=operation,
+            backend=self.engine.name,
+            seed=secrets.randbelow(2**32),
+        )
         self.store.save_inputs(job, original, masks, semantic_mask)
 
         crop = create_context_crop(
             original,
             masks,
             padding_ratio=self.settings.crop_padding_ratio,
+            min_crop_edge=self.settings.min_crop_edge,
             max_edge=self.settings.max_model_edge,
         )
         job.crop_box = crop.box

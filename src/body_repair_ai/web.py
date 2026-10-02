@@ -4,6 +4,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Annotated
 
+import httpx
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -97,6 +98,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 annotation_image,
                 expected_size=original_image.size,
             )
+            if operation is Operation.MIXED_REPAIR and len(semantic_masks.labels_present) == 1:
+                operation = {
+                    "dent": Operation.REMOVE_DENT,
+                    "dirt": Operation.REMOVE_DIRT,
+                    "scratch": Operation.REMOVE_SCRATCH,
+                }[semantic_masks.labels_present[0]]
             job = service.process(
                 original_image,
                 semantic_masks.editable,
@@ -105,6 +112,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except httpx.ConnectError as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="ComfyUI недоступен. Запустите .\\scripts\\start-comfyui.ps1.",
+            ) from exc
+        except httpx.HTTPStatusError as exc:
+            details = exc.response.text[:1000]
+            raise HTTPException(
+                status_code=502,
+                detail=f"ComfyUI отклонил workflow: {details}",
+            ) from exc
+        except (TimeoutError, httpx.TimeoutException) as exc:
+            raise HTTPException(
+                status_code=504,
+                detail="ComfyUI не завершил обработку за отведённое время.",
+            ) from exc
         return _public_job(job)
 
     @app.get("/api/jobs/{job_id}")

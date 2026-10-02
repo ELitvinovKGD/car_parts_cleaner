@@ -26,6 +26,24 @@ def test_render_workflow_replaces_exact_placeholders() -> None:
     assert rendered["node"]["inputs"]["unchanged"] == "prefix {{IMAGE}}"
 
 
+def test_sdxl_workflow_contains_required_placeholders() -> None:
+    workflow_path = Path("workflows/sdxl_inpaint_api.json")
+    workflow_text = workflow_path.read_text(encoding="utf-8")
+
+    for placeholder in ("{{IMAGE}}", "{{MASK}}", "{{PROMPT}}", "{{SEED}}", "{{OUTPUT_PREFIX}}"):
+        assert placeholder in workflow_text
+
+    workflow = json.loads(workflow_text)
+    class_types = {node["class_type"] for node in workflow.values()}
+    required_nodes = {
+        "CheckpointLoaderSimple",
+        "LoadImageMask",
+        "SetLatentNoiseMask",
+        "SaveImage",
+    }
+    assert required_nodes <= class_types
+
+
 def test_comfyui_engine_uploads_queues_and_downloads(tmp_path: Path) -> None:
     workflow_path = tmp_path / "workflow.json"
     workflow_path.write_text(

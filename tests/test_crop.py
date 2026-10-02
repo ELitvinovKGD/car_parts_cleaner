@@ -12,7 +12,13 @@ def test_context_crop_adds_padding_and_uses_model_dimensions() -> None:
             mask.putpixel((x, y), 255)
     masks = prepare_masks(mask, expected_size=original.size)
 
-    crop = create_context_crop(original, masks, padding_ratio=0.5, max_edge=1024)
+    crop = create_context_crop(
+        original,
+        masks,
+        padding_ratio=0.5,
+        min_crop_edge=64,
+        max_edge=1024,
+    )
 
     assert crop.box == (600, 300, 1400, 900)
     assert crop.source_crop_size == (800, 600)
@@ -34,6 +40,20 @@ def test_context_crop_is_clamped_to_image_boundaries() -> None:
     assert crop.box[1] == 0
 
 
+def test_context_crop_keeps_minimum_surrounding_context() -> None:
+    original = Image.new("RGB", (1200, 800), color="gray")
+    mask = Image.new("L", original.size, color=0)
+    for x in range(590, 610):
+        for y in range(390, 410):
+            mask.putpixel((x, y), 255)
+    masks = prepare_masks(mask, expected_size=original.size)
+
+    crop = create_context_crop(original, masks, padding_ratio=0.5, min_crop_edge=512)
+
+    assert crop.source_crop_size == (512, 512)
+    assert crop.image.size == (512, 512)
+
+
 def test_restore_crop_preserves_canvas_size() -> None:
     original = Image.new("RGB", (300, 200), color="black")
     mask = Image.new("L", original.size, color=0)
@@ -41,7 +61,7 @@ def test_restore_crop_preserves_canvas_size() -> None:
         for y in range(70, 110):
             mask.putpixel((x, y), 255)
     masks = prepare_masks(mask, expected_size=original.size)
-    crop = create_context_crop(original, masks)
+    crop = create_context_crop(original, masks, min_crop_edge=64)
     generated = Image.new("RGB", crop.image.size, color="white")
 
     canvas = restore_crop_to_canvas(original, generated, crop)

@@ -27,6 +27,7 @@ def create_context_crop(
     masks: MaskBundle,
     *,
     padding_ratio: float = 0.5,
+    min_crop_edge: int = 512,
     max_edge: int = 1024,
     multiple: int = 64,
 ) -> CropBundle:
@@ -37,11 +38,17 @@ def create_context_crop(
     defect_height = bottom - top
     padding = round(max(defect_width, defect_height) * padding_ratio)
 
+    desired_width = min(original.width, max(right - left + 2 * padding, min_crop_edge))
+    desired_height = min(original.height, max(bottom - top + 2 * padding, min_crop_edge))
+    center_x = (left + right) // 2
+    center_y = (top + bottom) // 2
+    crop_left = max(0, min(original.width - desired_width, center_x - desired_width // 2))
+    crop_top = max(0, min(original.height - desired_height, center_y - desired_height // 2))
     crop_box = (
-        max(0, left - padding),
-        max(0, top - padding),
-        min(original.width, right + padding),
-        min(original.height, bottom + padding),
+        crop_left,
+        crop_top,
+        crop_left + desired_width,
+        crop_top + desired_height,
     )
     source_size = (crop_box[2] - crop_box[0], crop_box[3] - crop_box[1])
     model_size = (
