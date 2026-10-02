@@ -10,10 +10,10 @@ from body_repair_ai.web import create_app
 
 def image_bytes(mode: str, color: int | tuple[int, int, int]) -> bytes:
     image = Image.new(mode, (24, 24), color=color)
-    if mode == "L":
+    if mode == "RGB" and color == (0, 0, 0):
         for x in range(8, 16):
             for y in range(8, 16):
-                image.putpixel((x, y), 255)
+                image.putpixel((x, y), (255, 0, 0))
     output = BytesIO()
     image.save(output, format="PNG")
     return output.getvalue()
@@ -25,10 +25,14 @@ def test_create_job_and_accept_result(tmp_path: Path) -> None:
 
     response = client.post(
         "/api/jobs",
-        data={"operation": "remove_dent"},
+        data={"operation": "mixed_repair"},
         files={
             "image": ("original.png", image_bytes("RGB", (50, 60, 70)), "image/png"),
-            "mask": ("mask.png", image_bytes("L", 0), "image/png"),
+            "annotation": (
+                "semantic.png",
+                image_bytes("RGB", (0, 0, 0)),
+                "image/png",
+            ),
         },
     )
 

@@ -12,6 +12,11 @@ from body_repair_ai.domain import Operation
 from body_repair_ai.inference.base import InferenceRequest
 
 OPERATION_PROMPTS = {
+    Operation.MIXED_REPAIR: (
+        "Restore only the marked defects on the painted automotive panel. Remove dents, dirt, "
+        "and scratches while preserving the existing paint color, reflections, lighting, panel "
+        "curvature, seams, and edges."
+    ),
     Operation.REMOVE_DENT: (
         "Restore the smooth painted automotive panel inside the mask. Remove only the shallow "
         "dent while continuing the existing paint color, reflections, lighting, and panel "

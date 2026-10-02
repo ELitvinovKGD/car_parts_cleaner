@@ -34,6 +34,7 @@ class DatasetStore:
         job: JobRecord,
         original: Image.Image,
         masks: MaskBundle,
+        semantic_mask: Image.Image | None = None,
     ) -> JobRecord:
         self.initialize()
         job_key = str(job.id)
@@ -45,14 +46,18 @@ class DatasetStore:
         original_path = raw_dir / "original.png"
         hard_path = annotation_dir / "mask_hard.png"
         soft_path = annotation_dir / "mask_soft.png"
+        semantic_path = annotation_dir / "semantic.png"
 
         original.convert("RGB").save(original_path, format="PNG")
         masks.hard.save(hard_path, format="PNG")
         masks.soft.save(soft_path, format="PNG")
+        if semantic_mask is not None:
+            semantic_mask.convert("RGB").save(semantic_path, format="PNG")
 
         job.original_path = original_path
         job.hard_mask_path = hard_path
         job.soft_mask_path = soft_path
+        job.semantic_mask_path = semantic_path if semantic_mask is not None else None
         self.save_job(job)
         return job
 

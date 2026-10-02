@@ -21,7 +21,14 @@ class RestorationService:
         self.store = store
         self.engine = engine
 
-    def process(self, original: Image.Image, mask: Image.Image, operation: Operation) -> JobRecord:
+    def process(
+        self,
+        original: Image.Image,
+        mask: Image.Image,
+        operation: Operation,
+        *,
+        semantic_mask: Image.Image | None = None,
+    ) -> JobRecord:
         original = original.convert("RGB")
         masks = prepare_masks(
             mask,
@@ -30,7 +37,7 @@ class RestorationService:
             feather_radius=self.settings.mask_feather_radius,
         )
         job = JobRecord(operation=operation, backend=self.engine.name)
-        self.store.save_inputs(job, original, masks)
+        self.store.save_inputs(job, original, masks, semantic_mask)
 
         crop = create_context_crop(
             original,

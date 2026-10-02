@@ -18,30 +18,56 @@
       </header>
 
       <form id="job-form" class="panel">
-        <section class="inputs">
-          <label class="dropzone">
+        <section class="upload-row">
+          <label class="file-picker">
             <strong>Исходная фотография</strong>
             <span>PNG, JPEG или WebP до 25 МБ</span>
             <input id="image" name="image" type="file" accept="image/png,image/jpeg,image/webp" required>
-            <img id="image-preview" alt="Предпросмотр оригинала">
-          </label>
-          <label class="dropzone mask-zone">
-            <strong>Маска дефекта</strong>
-            <span>Белое — изменить, чёрное — защитить</span>
-            <input id="mask" name="mask" type="file" accept="image/png,image/jpeg,image/webp" required>
-            <img id="mask-preview" alt="Предпросмотр маски">
           </label>
         </section>
 
+        <section id="editor" class="editor" hidden>
+          <div class="toolbar">
+            <div class="tool-group">
+              <span class="tool-label">Разметка</span>
+              <button type="button" class="color-tool active" data-tool="part">
+                <i class="swatch part"></i> Деталь
+              </button>
+              <button type="button" class="color-tool" data-tool="dent">
+                <i class="swatch dent"></i> Вмятина
+              </button>
+              <button type="button" class="color-tool" data-tool="dirt">
+                <i class="swatch dirt"></i> Грязь
+              </button>
+              <button type="button" class="color-tool" data-tool="scratch">
+                <i class="swatch scratch"></i> Царапина
+              </button>
+              <button type="button" class="color-tool" data-tool="erase">
+                <i class="swatch erase"></i> Стереть
+              </button>
+            </div>
+            <label class="brush-control">Кисть
+              <input id="brush-size" type="range" min="4" max="160" value="48">
+              <output id="brush-output">48 px</output>
+            </label>
+            <div class="history-tools">
+              <button id="undo" class="secondary" type="button">Отменить</button>
+              <button id="clear" class="secondary" type="button">Очистить</button>
+            </div>
+          </div>
+          <div class="canvas-shell">
+            <canvas id="photo-canvas"></canvas>
+            <canvas id="paint-canvas"></canvas>
+            <p id="canvas-placeholder">Загрузите фотографию для начала разметки</p>
+          </div>
+          <p class="legend-note">
+            Деталь показывается голубым, но сохраняется белым. Изменяться будут только красные,
+            жёлтые и пурпурные области; остальное защищено.
+          </p>
+        </section>
+
         <section class="controls">
-          <label>Операция
-            <select name="operation">
-              <option value="remove_dent">Убрать вмятину</option>
-              <option value="remove_dirt">Убрать грязь</option>
-              <option value="remove_scratch">Убрать царапину</option>
-            </select>
-          </label>
-          <button id="submit" type="submit">Создать тестовый результат</button>
+          <button id="submit" type="submit" disabled>Создать тестовый результат</button>
         </section>
         <p id="message" role="status"></p>
       </form>

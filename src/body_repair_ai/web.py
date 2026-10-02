@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from body_repair_ai.config import Settings, get_settings
 from body_repair_ai.domain import JobRecord, Operation
+from body_repair_ai.image_processing.semantic import parse_semantic_mask
 from body_repair_ai.inference import ComfyUIEngine, InferenceEngine, MockInferenceEngine
 from body_repair_ai.service import RestorationService
 from body_repair_ai.storage import DatasetStore
@@ -86,13 +87,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/jobs", status_code=201)
     async def create_job(
         image: Annotated[UploadFile, File()],
-        mask: Annotated[UploadFile, File()],
-        operation: Annotated[Operation, Form()],
+        annotation: Annotated[UploadFile, File()],
+        operation: Annotated[Operation, Form()] = Operation.MIXED_REPAIR,
     ) -> dict[str, object]:
         original_image = await _read_image(image, "Image")
-        mask_image = await _read_image(mask, "Mask")
+        annotation_image = await _read_image(annotation, "Semantic mask")
         try:
-            job = service.process(original_image, mask_image, operation)
+            semantic_masks = parse_semantic_mask(
+                annotation_image,
+                expected_size=original_image.size,
+            )
+            job = service.process(
+                original_image,
+                semantic_masks.editable,
+                operation,
+                semantic_mask=annotation_image,
+            )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         return _public_job(job)

@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 
 class Operation(StrEnum):
+    MIXED_REPAIR = "mixed_repair"
     REMOVE_DENT = "remove_dent"
     REMOVE_DIRT = "remove_dirt"
     REMOVE_SCRATCH = "remove_scratch"
@@ -32,6 +33,7 @@ class JobRecord(BaseModel):
     original_path: Path | None = None
     hard_mask_path: Path | None = None
     soft_mask_path: Path | None = None
+    semantic_mask_path: Path | None = None
     result_path: Path | None = None
     backend: str = "mock"
     seed: int | None = None
