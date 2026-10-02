@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from body_repair_ai.config import Settings, get_settings
 from body_repair_ai.domain import JobRecord, Operation
-from body_repair_ai.inference import MockInferenceEngine
+from body_repair_ai.inference import ComfyUIEngine, InferenceEngine, MockInferenceEngine
 from body_repair_ai.service import RestorationService
 from body_repair_ai.storage import DatasetStore
 
@@ -57,12 +57,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     store = DatasetStore(settings.data_dir)
     store.initialize()
 
-    if settings.inference_backend != "mock":
-        raise RuntimeError(
-            "Only the mock backend is available in this revision. "
-            "Set INFERENCE_BACKEND=mock."
+    engine: InferenceEngine
+    if settings.inference_backend == "mock":
+        engine = MockInferenceEngine()
+    elif settings.inference_backend == "comfyui":
+        engine = ComfyUIEngine(
+            base_url=settings.comfyui_url,
+            workflow_path=settings.comfyui_workflow,
+            timeout_seconds=settings.comfyui_timeout_seconds,
+            poll_interval_seconds=settings.comfyui_poll_interval_seconds,
         )
-    service = RestorationService(settings, store, MockInferenceEngine())
+    else:
+        raise RuntimeError(f"Unsupported inference backend: {settings.inference_backend}")
+    service = RestorationService(settings, store, engine)
 
     app = FastAPI(title="Body Repair AI", version="0.1.0")
     assets = Path(__file__).with_name("web_assets")
