@@ -15,14 +15,15 @@ const submit = document.querySelector("#submit");
 const resultPanel = document.querySelector("#result-panel");
 
 const tools = {
-  part: { semantic: "#ffffff", display: "rgba(0, 183, 255, 0.42)" },
-  dent: { semantic: "#ff0000", display: "rgba(255, 0, 0, 0.55)" },
-  dirt: { semantic: "#ffff00", display: "rgba(255, 255, 0, 0.55)" },
-  scratch: { semantic: "#ff00ff", display: "rgba(255, 0, 255, 0.58)" },
-  erase: { semantic: "#000000", display: null },
+  part: { semantic: "#ffffff", semanticRgb: [255, 255, 255], display: "rgba(0, 183, 255, 0.42)", displayRgba: [0, 183, 255, 107] },
+  dent: { semantic: "#ff0000", semanticRgb: [255, 0, 0], display: "rgba(255, 0, 0, 0.55)", displayRgba: [255, 0, 0, 140] },
+  dirt: { semantic: "#ffff00", semanticRgb: [255, 255, 0], display: "rgba(255, 255, 0, 0.55)", displayRgba: [255, 255, 0, 140] },
+  scratch: { semantic: "#ff00ff", semanticRgb: [255, 0, 255], display: "rgba(255, 0, 255, 0.58)", displayRgba: [255, 0, 255, 148] },
+  erase: { semantic: "#000000", semanticRgb: [0, 0, 0], display: null, displayRgba: [0, 0, 0, 0] },
 };
 
 let activeTool = "part";
+let inputMode = "brush";
 let drawing = false;
 let lastPoint = null;
 let currentJobId = null;
@@ -80,6 +81,15 @@ document.querySelectorAll(".color-tool").forEach((button) => {
   });
 });
 
+document.querySelectorAll(".mode-tool").forEach((button) => {
+  button.addEventListener("click", () => {
+    document.querySelectorAll(".mode-tool").forEach((item) => item.classList.remove("active"));
+    button.classList.add("active");
+    inputMode = button.dataset.mode;
+    paintCanvas.classList.toggle("fill-mode", inputMode === "fill");
+  });
+});
+
 brushInput.addEventListener("input", () => {
   brushOutput.value = `${brushInput.value} px`;
 });
@@ -114,9 +124,95 @@ function drawTo(point) {
   lastPoint = point;
 }
 
+function floodFill(point) {
+  const width = semanticCanvas.width;
+  const height = semanticCanvas.height;
+  const startX = Math.max(0, Math.min(width - 1, Math.floor(point.x)));
+  const startY = Math.max(0, Math.min(height - 1, Math.floor(point.y)));
+  const semanticImage = semanticContext.getImageData(0, 0, width, height);
+  const displayImage = paintContext.getImageData(0, 0, width, height);
+  const startOffset = (startY * width + startX) * 4;
+  const target = [
+    semanticImage.data[startOffset],
+    semanticImage.data[startOffset + 1],
+    semanticImage.data[startOffset + 2],
+    semanticImage.data[startOffset + 3],
+  ];
+  const tool = tools[activeTool];
+  if (
+    target[0] === tool.semanticRgb[0]
+    && target[1] === tool.semanticRgb[1]
+    && target[2] === tool.semanticRgb[2]
+    && target[3] === 255
+  ) return { changed: 0, blocked: false };
+
+  const queue = new Int32Array(width * height);
+  let head = 0;
+  let tail = 0;
+  queue[tail++] = startY * width + startX;
+  // Mark queued pixels using alpha 254; saved semantic pixels are always opaque.
+  semanticImage.data[startOffset + 3] = 254;
+
+  while (head < tail) {
+    const pixel = queue[head++];
+    const x = pixel % width;
+    const y = Math.floor(pixel / width);
+    const neighbors = [];
+    if (x > 0) neighbors.push(pixel - 1);
+    if (x + 1 < width) neighbors.push(pixel + 1);
+    if (y > 0) neighbors.push(pixel - width);
+    if (y + 1 < height) neighbors.push(pixel + width);
+    for (const neighbor of neighbors) {
+      const offset = neighbor * 4;
+      if (
+        semanticImage.data[offset] === target[0]
+        && semanticImage.data[offset + 1] === target[1]
+        && semanticImage.data[offset + 2] === target[2]
+        && semanticImage.data[offset + 3] === target[3]
+      ) {
+        semanticImage.data[offset + 3] = 254;
+        queue[tail++] = neighbor;
+      }
+    }
+  }
+
+  const blocked = tail > width * height * 0.65;
+  if (blocked) return { changed: tail, blocked: true };
+
+  for (let index = 0; index < tail; index += 1) {
+    const offset = queue[index] * 4;
+    semanticImage.data[offset] = tool.semanticRgb[0];
+    semanticImage.data[offset + 1] = tool.semanticRgb[1];
+    semanticImage.data[offset + 2] = tool.semanticRgb[2];
+    semanticImage.data[offset + 3] = 255;
+    displayImage.data[offset] = tool.displayRgba[0];
+    displayImage.data[offset + 1] = tool.displayRgba[1];
+    displayImage.data[offset + 2] = tool.displayRgba[2];
+    displayImage.data[offset + 3] = tool.displayRgba[3];
+  }
+  semanticContext.putImageData(semanticImage, 0, 0);
+  paintContext.putImageData(displayImage, 0, 0);
+  return { changed: tail, blocked: false };
+}
+
 paintCanvas.addEventListener("pointerdown", (event) => {
   if (!sourceFile) return;
   event.preventDefault();
+  if (inputMode === "fill") {
+    pushHistory();
+    const result = floodFill(pointFromEvent(event));
+    if (result.blocked) {
+      history.pop();
+      message.textContent = "Заливка захватила почти весь холст. Сначала замкните границу области кистью.";
+      return;
+    }
+    if (result.changed > 0) {
+      message.textContent = `Залито пикселей: ${result.changed.toLocaleString("ru-RU")}.`;
+    } else {
+      history.pop();
+    }
+    return;
+  }
   paintCanvas.setPointerCapture(event.pointerId);
   pushHistory();
   drawing = true;

@@ -46,6 +46,11 @@
                 <i class="swatch erase"></i> Стереть
               </button>
             </div>
+            <div class="tool-group mode-group">
+              <span class="tool-label">Способ</span>
+              <button type="button" class="mode-tool active" data-mode="brush">Кисть</button>
+              <button type="button" class="mode-tool" data-mode="fill">Заливка</button>
+            </div>
             <label class="brush-control">Кисть
               <input id="brush-size" type="range" min="4" max="160" value="48">
               <output id="brush-output">48 px</output>
@@ -62,7 +67,8 @@
           </div>
           <p class="legend-note">
             Деталь показывается голубым, но сохраняется белым. Изменяться будут только красные,
-            жёлтые и пурпурные области; остальное защищено.
+            жёлтые и пурпурные области; остальное защищено. Для заливки сначала замкните область
+            кистью, затем щёлкните внутри неё.
           </p>
         </section>
 
