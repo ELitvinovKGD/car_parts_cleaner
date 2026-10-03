@@ -106,7 +106,6 @@ document.querySelectorAll(".layer-tool").forEach((button) => {
     document.querySelectorAll(".layer-tool").forEach((item) => item.classList.remove("active"));
     button.classList.add("active");
     activeLayer = button.dataset.layer;
-    if (inputMode === "sam" && activeLayer !== "part") selectMode("brush");
     message.textContent = `Активный слой: ${layerDefinitions[activeLayer].label}.`;
   });
 });
@@ -123,12 +122,9 @@ function selectMode(mode) {
 document.querySelectorAll(".mode-tool").forEach((button) => {
   button.addEventListener("click", () => {
     const mode = button.dataset.mode;
-    if (mode === "sam" && activeLayer !== "part") {
-      document.querySelector('[data-layer="part"]').click();
-    }
     selectMode(mode);
     message.textContent = mode === "sam"
-      ? "SAM 2: щёлкните внутри нужной кузовной детали."
+      ? `SAM 2: обведите рамкой область слоя «${layerDefinitions[activeLayer].label}».`
       : `Режим: ${button.textContent.trim().toLowerCase()}.`;
   });
 });
@@ -218,11 +214,26 @@ function floodFill(point) {
   return { changed: tail, blocked: false };
 }
 
+function layerHasContent(name) {
+  const pixels = layerContexts[name].getImageData(
+    0, 0, photoCanvas.width, photoCanvas.height,
+  ).data;
+  for (let index = 3; index < pixels.length; index += 4) {
+    if (pixels[index] > 127) return true;
+  }
+  return false;
+}
+
 async function applySamMask(point, endPoint = null) {
   if (samBusy) return;
+  if (activeLayer !== "part" && !layerHasContent("part")) {
+    message.textContent = "Сначала выделите слой «Деталь»: дефектные слои ограничиваются его границей.";
+    return;
+  }
+  const targetLayer = activeLayer;
   samBusy = true;
   pushHistory();
-  message.textContent = "SAM 2 выделяет деталь… Первый запуск загружает модель в память.";
+  message.textContent = `SAM 2 выделяет область слоя «${layerDefinitions[targetLayer].label}»…`;
   try {
     const body = new FormData();
     body.append("image", sourceFile, sourceFile.name);
@@ -240,8 +251,10 @@ async function applySamMask(point, endPoint = null) {
     const blob = await response.blob();
     const maskImage = new Image();
     maskImage.onload = () => {
-      const context = layerContexts.part;
-      context.clearRect(0, 0, photoCanvas.width, photoCanvas.height);
+      const context = layerContexts[targetLayer];
+      if (targetLayer === "part") {
+        context.clearRect(0, 0, photoCanvas.width, photoCanvas.height);
+      }
       const temporary = document.createElement("canvas");
       temporary.width = photoCanvas.width;
       temporary.height = photoCanvas.height;
@@ -255,9 +268,16 @@ async function applySamMask(point, endPoint = null) {
         pixels.data[index + 2] = 255;
         pixels.data[index + 3] = value;
       }
-      context.putImageData(pixels, 0, 0);
+      temporaryContext.putImageData(pixels, 0, 0);
+      context.drawImage(temporary, 0, 0);
+      if (targetLayer !== "part") {
+        context.save();
+        context.globalCompositeOperation = "destination-in";
+        context.drawImage(layerCanvases.part, 0, 0);
+        context.restore();
+      }
       renderOverlay();
-      message.textContent = "SAM 2 создал слой детали. Подправьте его кистью или ластиком.";
+      message.textContent = `SAM 2 добавил область в слой «${layerDefinitions[targetLayer].label}». Подправьте её кистью или ластиком.`;
       URL.revokeObjectURL(maskImage.src);
     };
     maskImage.src = URL.createObjectURL(blob);
@@ -276,7 +296,7 @@ paintCanvas.addEventListener("pointerdown", (event) => {
   if (inputMode === "sam") {
     samStart = point;
     paintCanvas.setPointerCapture(event.pointerId);
-    message.textContent = "Протяните рамку вокруг одной детали или просто щёлкните внутри неё.";
+    message.textContent = `Протяните тесную рамку вокруг области «${layerDefinitions[activeLayer].label}» или щёлкните внутри неё.`;
     return;
   }
   if (inputMode === "fill") {
