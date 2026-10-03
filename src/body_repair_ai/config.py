@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     comfyui_workflow: Path = Path("workflows/sdxl_inpaint_api.json")
     comfyui_timeout_seconds: float = Field(default=300.0, gt=0.0, le=3600.0)
     comfyui_poll_interval_seconds: float = Field(default=1.0, gt=0.0, le=30.0)
+    sam2_url: str = "http://127.0.0.1:8190"
+    sam2_timeout_seconds: float = Field(default=120.0, gt=0.0, le=600.0)
     mask_threshold: int = Field(default=127, ge=0, le=255)
     mask_feather_radius: float = Field(default=8.0, ge=0.0, le=128.0)
     crop_padding_ratio: float = Field(default=0.5, ge=0.0, le=3.0)

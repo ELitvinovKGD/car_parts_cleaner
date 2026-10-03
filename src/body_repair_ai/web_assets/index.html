@@ -29,27 +29,26 @@
         <section id="editor" class="editor" hidden>
           <div class="toolbar">
             <div class="tool-group">
-              <span class="tool-label">Разметка</span>
-              <button type="button" class="color-tool active" data-tool="part">
+              <span class="tool-label">Независимый слой</span>
+              <button type="button" class="layer-tool active" data-layer="part">
                 <i class="swatch part"></i> Деталь
               </button>
-              <button type="button" class="color-tool" data-tool="dent">
+              <button type="button" class="layer-tool" data-layer="dent">
                 <i class="swatch dent"></i> Вмятина
               </button>
-              <button type="button" class="color-tool" data-tool="dirt">
-                <i class="swatch dirt"></i> Грязь
-              </button>
-              <button type="button" class="color-tool" data-tool="scratch">
+              <button type="button" class="layer-tool" data-layer="scratch">
                 <i class="swatch scratch"></i> Царапина
               </button>
-              <button type="button" class="color-tool" data-tool="erase">
-                <i class="swatch erase"></i> Стереть
+              <button type="button" class="layer-tool" data-layer="dirt">
+                <i class="swatch dirt"></i> Грязь
               </button>
             </div>
             <div class="tool-group mode-group">
               <span class="tool-label">Способ</span>
               <button type="button" class="mode-tool active" data-mode="brush">Кисть</button>
               <button type="button" class="mode-tool" data-mode="fill">Заливка</button>
+              <button type="button" class="mode-tool" data-mode="erase">Ластик</button>
+              <button type="button" class="mode-tool sam-button" data-mode="sam">SAM 2</button>
             </div>
             <label class="brush-control">Кисть
               <input id="brush-size" type="range" min="4" max="160" value="48">
@@ -57,7 +56,7 @@
             </label>
             <div class="history-tools">
               <button id="undo" class="secondary" type="button">Отменить</button>
-              <button id="clear" class="secondary" type="button">Очистить</button>
+              <button id="clear-layer" class="secondary" type="button">Очистить слой</button>
             </div>
           </div>
           <div class="canvas-shell">
@@ -66,14 +65,15 @@
             <p id="canvas-placeholder">Загрузите фотографию для начала разметки</p>
           </div>
           <p class="legend-note">
-            Деталь показывается голубым, но сохраняется белым. Изменяться будут только красные,
-            жёлтые и пурпурные области; остальное защищено. Для заливки сначала замкните область
-            кистью, затем щёлкните внутри неё.
+            Сначала выберите слой «Деталь» и нажмите SAM 2, затем протяните рамку вокруг одной
+            детали (либо просто щёлкните внутри неё).
+            Исправьте выделение кистью и ластиком. Вмятины, царапины и грязь хранятся
+            независимо и могут пересекаться, не стирая друг друга.
           </p>
         </section>
 
         <section class="controls">
-          <button id="submit" type="submit" disabled>Создать тестовый результат</button>
+          <button id="submit" type="submit" disabled>Обработать по этапам</button>
         </section>
         <p id="message" role="status"></p>
       </form>

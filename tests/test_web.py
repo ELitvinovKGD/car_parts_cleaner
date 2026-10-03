@@ -19,6 +19,17 @@ def image_bytes(mode: str, color: int | tuple[int, int, int]) -> bytes:
     return output.getvalue()
 
 
+def mask_bytes(*, filled: bool = False) -> bytes:
+    image = Image.new("L", (24, 24), color=0)
+    if filled:
+        for x in range(8, 16):
+            for y in range(8, 16):
+                image.putpixel((x, y), 255)
+    output = BytesIO()
+    image.save(output, format="PNG")
+    return output.getvalue()
+
+
 def test_create_job_and_accept_result(tmp_path: Path) -> None:
     app = create_app(Settings(data_dir=tmp_path / "data", inference_backend="mock"))
     client = TestClient(app)
@@ -65,3 +76,25 @@ def test_single_semantic_label_selects_specific_operation(tmp_path: Path) -> Non
 
     assert response.status_code == 201
     assert response.json()["operation"] == "remove_scratch"
+
+
+def test_layered_job_saves_independent_masks_and_stages(tmp_path: Path) -> None:
+    app = create_app(Settings(data_dir=tmp_path / "data", inference_backend="mock"))
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/jobs",
+        files={
+            "image": ("original.png", image_bytes("RGB", (50, 60, 70)), "image/png"),
+            "part_mask": ("part.png", mask_bytes(filled=True), "image/png"),
+            "dent_mask": ("dent.png", mask_bytes(filled=True), "image/png"),
+            "scratch_mask": ("scratch.png", mask_bytes(filled=True), "image/png"),
+            "dirt_mask": ("dirt.png", mask_bytes(), "image/png"),
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["completed_stages"] == ["remove_dent", "remove_scratch"]
+    assert set(payload["layer_urls"]) == {"part", "dent", "scratch", "dirt"}
+    assert client.get(payload["layer_urls"]["dent"]).status_code == 200

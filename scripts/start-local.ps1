@@ -5,7 +5,9 @@ $comfyPython = Join-Path $runtimeRoot "python_embeded\python.exe"
 $comfyRoot = Join-Path $runtimeRoot "ComfyUI"
 $appPython = Join-Path $projectRoot ".venv\Scripts\python.exe"
 $logsRoot = Join-Path $projectRoot ".runtime\logs"
+$samModel = Join-Path $projectRoot ".runtime\sam2\models\sam2.1-hiera-tiny\model.safetensors"
 $comfyProcess = $null
+$samProcess = $null
 
 if (-not (Test-Path -LiteralPath $comfyPython)) {
     throw "ComfyUI is not installed. Run: .\scripts\setup-comfyui.ps1"
@@ -31,6 +33,15 @@ if ($null -ne $existingApp) {
 function Test-ComfyUI {
     try {
         Invoke-RestMethod -Uri "http://127.0.0.1:8188/system_stats" -TimeoutSec 2 | Out-Null
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+function Test-SAM2 {
+    try {
+        Invoke-RestMethod -Uri "http://127.0.0.1:8190/health" -TimeoutSec 2 | Out-Null
         return $true
     } catch {
         return $false
@@ -64,10 +75,43 @@ if (-not (Test-ComfyUI)) {
     }
 }
 
+if (-not (Test-SAM2)) {
+    if (Test-Path -LiteralPath $samModel) {
+        New-Item -ItemType Directory -Force -Path $logsRoot | Out-Null
+        $env:SAM2_MODEL_PATH = Split-Path -Parent $samModel
+        $env:SAM2_HOST = "127.0.0.1"
+        $env:SAM2_PORT = "8190"
+        $env:SAM2_KEEP_GPU = "0"
+        $env:HF_HUB_DISABLE_TELEMETRY = "1"
+        $samProcess = Start-Process `
+            -FilePath $comfyPython `
+            -ArgumentList @(".\scripts\sam2_service.py") `
+            -WorkingDirectory $projectRoot `
+            -WindowStyle Hidden `
+            -RedirectStandardOutput (Join-Path $logsRoot "sam2.stdout.log") `
+            -RedirectStandardError (Join-Path $logsRoot "sam2.stderr.log") `
+            -PassThru
+        Write-Host "Starting SAM 2 microservice..."
+        $samDeadline = (Get-Date).AddMinutes(2)
+        while (-not (Test-SAM2)) {
+            if ($samProcess.HasExited) {
+                throw "SAM 2 exited during startup. See .runtime\logs\sam2.stderr.log"
+            }
+            if ((Get-Date) -gt $samDeadline) {
+                throw "SAM 2 did not become ready within 2 minutes."
+            }
+            Start-Sleep -Seconds 2
+        }
+    } else {
+        Write-Warning "SAM 2 model is not installed. Manual masks still work. Run .\scripts\setup-sam2.ps1"
+    }
+}
+
 $env:INFERENCE_BACKEND = "comfyui"
 $env:COMFYUI_URL = "http://127.0.0.1:8188"
 $env:COMFYUI_WORKFLOW = ".\workflows\sdxl_inpaint_api.json"
 $env:COMFYUI_TIMEOUT_SECONDS = "600"
+$env:SAM2_URL = "http://127.0.0.1:8190"
 
 try {
     Set-Location -LiteralPath $projectRoot
@@ -75,5 +119,8 @@ try {
 } finally {
     if ($null -ne $comfyProcess -and -not $comfyProcess.HasExited) {
         Stop-Process -Id $comfyProcess.Id
+    }
+    if ($null -ne $samProcess -and -not $samProcess.HasExited) {
+        Stop-Process -Id $samProcess.Id
     }
 }

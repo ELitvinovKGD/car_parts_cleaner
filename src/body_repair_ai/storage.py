@@ -7,7 +7,7 @@ from shutil import copyfile
 from PIL import Image
 
 from body_repair_ai.domain import JobRecord
-from body_repair_ai.image_processing import MaskBundle
+from body_repair_ai.image_processing import MaskBundle, SemanticMasks
 
 
 class DatasetStore:
@@ -58,6 +58,26 @@ class DatasetStore:
         job.hard_mask_path = hard_path
         job.soft_mask_path = soft_path
         job.semantic_mask_path = semantic_path if semantic_mask is not None else None
+        self.save_job(job)
+        return job
+
+    def save_layer_inputs(
+        self,
+        job: JobRecord,
+        original: Image.Image,
+        masks: MaskBundle,
+        semantic_masks: SemanticMasks,
+    ) -> JobRecord:
+        """Save an immutable original plus each independent annotation layer."""
+
+        self.save_inputs(job, original, masks)
+        annotation_dir = self.root / "annotations" / str(job.id)
+        layer_paths: dict[str, Path] = {}
+        for name in ("part", "dent", "scratch", "dirt"):
+            path = annotation_dir / f"{name}.png"
+            getattr(semantic_masks, name).convert("L").save(path, format="PNG")
+            layer_paths[name] = path
+        job.layer_mask_paths = layer_paths
         self.save_job(job)
         return job
 

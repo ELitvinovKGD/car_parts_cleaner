@@ -34,6 +34,49 @@ def _binary_image(condition: np.ndarray) -> Image.Image:
     return Image.fromarray(np.where(condition, 255, 0).astype(np.uint8))
 
 
+def parse_layer_masks(
+    *,
+    part: Image.Image,
+    dent: Image.Image,
+    dirt: Image.Image,
+    scratch: Image.Image,
+    expected_size: tuple[int, int],
+    threshold: int = 127,
+) -> SemanticMasks:
+    """Normalize four independent grayscale annotation layers.
+
+    Layers deliberately remain independent: a dirty dent may be present in both
+    masks without one annotation destroying the other.
+    """
+
+    source_layers = {"part": part, "dent": dent, "dirt": dirt, "scratch": scratch}
+    conditions: dict[str, np.ndarray] = {}
+    for name, image in source_layers.items():
+        if image.size != expected_size:
+            raise ValueError(
+                f"{name} mask size {image.size} does not match image size {expected_size}."
+            )
+        conditions[name] = np.asarray(image.convert("L"), dtype=np.uint8) > threshold
+
+    if not np.any(conditions["part"]):
+        raise ValueError("Select the body part before marking defects.")
+
+    # The part layer is the hard safety boundary. Defect strokes outside it are
+    # clipped so the background and neighbouring panels remain protected.
+    for name in ("dent", "dirt", "scratch"):
+        conditions[name] &= conditions["part"]
+    editable_condition = conditions["dent"] | conditions["dirt"] | conditions["scratch"]
+    if not np.any(editable_condition):
+        raise ValueError("Mark at least one defect inside the selected body part.")
+    return SemanticMasks(
+        part=_binary_image(conditions["part"]),
+        dent=_binary_image(conditions["dent"]),
+        dirt=_binary_image(conditions["dirt"]),
+        scratch=_binary_image(conditions["scratch"]),
+        editable=_binary_image(editable_condition),
+    )
+
+
 def parse_semantic_mask(
     annotation: Image.Image,
     *,
