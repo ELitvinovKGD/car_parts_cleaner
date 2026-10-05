@@ -11,6 +11,7 @@ const brushOutput = document.querySelector("#brush-output");
 const message = document.querySelector("#message");
 const submit = document.querySelector("#submit");
 const resultPanel = document.querySelector("#result-panel");
+const detailDialog = document.querySelector("#detail-comparison-dialog");
 
 const layerDefinitions = {
   part: { label: "деталь", color: "rgba(0, 183, 255, 0.42)" },
@@ -37,6 +38,116 @@ let sourceFile = null;
 let history = [];
 let samBusy = false;
 let samStart = null;
+
+function createSynchronizedZoom(root, statusElement) {
+  const viewports = [...root.querySelectorAll(".zoom-viewport")];
+  const images = [...root.querySelectorAll("[data-zoom-image]")];
+  const state = { scale: 1, x: 0, y: 0 };
+  let drag = null;
+
+  function clampPosition() {
+    const viewport = viewports[0];
+    const limitX = viewport.clientWidth * (state.scale - 1) / 2;
+    const limitY = viewport.clientHeight * (state.scale - 1) / 2;
+    state.x = Math.max(-limitX, Math.min(limitX, state.x));
+    state.y = Math.max(-limitY, Math.min(limitY, state.y));
+  }
+
+  function apply() {
+    clampPosition();
+    const transform = `translate3d(${state.x}px, ${state.y}px, 0) scale(${state.scale})`;
+    images.forEach((image) => { image.style.transform = transform; });
+    viewports.forEach((viewport) => {
+      viewport.classList.toggle("drag-ready", state.scale > 1);
+    });
+    statusElement.textContent = `${Math.round(state.scale * 100)}%`;
+  }
+
+  function reset() {
+    state.scale = 1;
+    state.x = 0;
+    state.y = 0;
+    apply();
+  }
+
+  viewports.forEach((viewport) => {
+    viewport.addEventListener("wheel", (event) => {
+      event.preventDefault();
+      const previousScale = state.scale;
+      const nextScale = Math.max(1, Math.min(8, previousScale * Math.exp(-event.deltaY * 0.0015)));
+      if (nextScale === previousScale) return;
+      const bounds = viewport.getBoundingClientRect();
+      const cursorX = event.clientX - bounds.left - bounds.width / 2;
+      const cursorY = event.clientY - bounds.top - bounds.height / 2;
+      const ratio = nextScale / previousScale;
+      state.x = cursorX - (cursorX - state.x) * ratio;
+      state.y = cursorY - (cursorY - state.y) * ratio;
+      state.scale = nextScale;
+      apply();
+    }, { passive: false });
+
+    viewport.addEventListener("pointerdown", (event) => {
+      if (state.scale <= 1) return;
+      event.preventDefault();
+      viewport.setPointerCapture(event.pointerId);
+      viewport.classList.add("dragging");
+      drag = {
+        pointerId: event.pointerId,
+        clientX: event.clientX,
+        clientY: event.clientY,
+        x: state.x,
+        y: state.y,
+      };
+    });
+
+    viewport.addEventListener("pointermove", (event) => {
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      state.x = drag.x + event.clientX - drag.clientX;
+      state.y = drag.y + event.clientY - drag.clientY;
+      apply();
+    });
+
+    const stopDrag = (event) => {
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      drag = null;
+      viewport.classList.remove("dragging");
+      if (viewport.hasPointerCapture(event.pointerId)) {
+        viewport.releasePointerCapture(event.pointerId);
+      }
+    };
+    viewport.addEventListener("pointerup", stopDrag);
+    viewport.addEventListener("pointercancel", stopDrag);
+    viewport.addEventListener("dblclick", reset);
+  });
+
+  window.addEventListener("resize", apply);
+  apply();
+  return { reset };
+}
+
+const mainZoom = createSynchronizedZoom(
+  document.querySelector("#result-comparison"),
+  document.querySelector("#main-zoom-value"),
+);
+const detailZoom = createSynchronizedZoom(
+  document.querySelector("#detail-comparison"),
+  document.querySelector("#detail-zoom-value"),
+);
+
+document.querySelector("#reset-main-zoom").addEventListener("click", mainZoom.reset);
+document.querySelector("#reset-detail-zoom").addEventListener("click", detailZoom.reset);
+document.querySelector("#open-detail-comparison").addEventListener("click", () => {
+  document.querySelector("#detail-original").src = document.querySelector("#result-original").src;
+  document.querySelector("#detail-result").src = document.querySelector("#result-image").src;
+  detailDialog.showModal();
+  requestAnimationFrame(detailZoom.reset);
+});
+document.querySelector("#close-detail-comparison").addEventListener("click", () => {
+  detailDialog.close();
+});
+detailDialog.addEventListener("click", (event) => {
+  if (event.target === detailDialog) detailDialog.close();
+});
 
 function resetLayers(width, height) {
   for (const canvas of Object.values(layerCanvases)) {
@@ -413,6 +524,7 @@ form.addEventListener("submit", async (event) => {
     const cacheKey = `?v=${Date.now()}`;
     document.querySelector("#result-original").src = payload.original_url + cacheKey;
     document.querySelector("#result-image").src = payload.result_url + cacheKey;
+    mainZoom.reset();
     document.querySelector("#backend-badge").textContent = `backend: ${payload.backend}`;
     resultPanel.hidden = false;
     resultPanel.scrollIntoView({ behavior: "smooth" });

@@ -86,9 +86,23 @@
           </div>
           <span id="backend-badge" class="badge"></span>
         </div>
-        <div class="comparison">
-          <figure><img id="result-original" alt="До"><figcaption>До</figcaption></figure>
-          <figure><img id="result-image" alt="После"><figcaption>После</figcaption></figure>
+        <div class="comparison-tools">
+          <span>Колесо — масштаб обеих фотографий, перетаскивание — перемещение</span>
+          <span id="main-zoom-value" class="zoom-value">100%</span>
+          <button id="reset-main-zoom" class="secondary compact" type="button">Сбросить</button>
+          <button id="open-detail-comparison" class="secondary compact" type="button">
+            Детальное сравнение
+          </button>
+        </div>
+        <div id="result-comparison" class="comparison zoom-comparison">
+          <figure>
+            <div class="zoom-viewport"><img id="result-original" data-zoom-image alt="До"></div>
+            <figcaption>До</figcaption>
+          </figure>
+          <figure>
+            <div class="zoom-viewport"><img id="result-image" data-zoom-image alt="После"></div>
+            <figcaption>После</figcaption>
+          </figure>
         </div>
         <div class="review-actions">
           <button type="button" class="secondary" data-review="false">Отклонить</button>
@@ -96,6 +110,31 @@
         </div>
       </section>
     </main>
+
+    <dialog id="detail-comparison-dialog" class="detail-dialog">
+      <div class="detail-heading">
+        <div>
+          <p class="eyebrow">Проверка артефактов</p>
+          <h2>Детальное сравнение</h2>
+        </div>
+        <div class="detail-actions">
+          <span id="detail-zoom-value" class="zoom-value">100%</span>
+          <button id="reset-detail-zoom" class="secondary compact" type="button">Сбросить</button>
+          <button id="close-detail-comparison" class="secondary compact" type="button">Закрыть</button>
+        </div>
+      </div>
+      <p class="zoom-help">Масштаб и положение синхронизированы. Используйте колесо и перетаскивание.</p>
+      <div id="detail-comparison" class="comparison zoom-comparison detail-comparison">
+        <figure>
+          <div class="zoom-viewport"><img id="detail-original" data-zoom-image alt="До крупно"></div>
+          <figcaption>До</figcaption>
+        </figure>
+        <figure>
+          <div class="zoom-viewport"><img id="detail-result" data-zoom-image alt="После крупно"></div>
+          <figcaption>После</figcaption>
+        </figure>
+      </div>
+    </dialog>
     <script src="/assets/app.js" defer></script>
   </body>
 </html>
