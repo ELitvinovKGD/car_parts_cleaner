@@ -98,3 +98,27 @@ def test_layered_job_saves_independent_masks_and_stages(tmp_path: Path) -> None:
     assert payload["completed_stages"] == ["remove_dent", "remove_scratch"]
     assert set(payload["layer_urls"]) == {"part", "dent", "scratch", "dirt"}
     assert client.get(payload["layer_urls"]["dent"]).status_code == 200
+
+
+def test_donor_job_saves_pair_and_returns_result(tmp_path: Path) -> None:
+    app = create_app(Settings(data_dir=tmp_path / "data", inference_backend="mock"))
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/donor-jobs",
+        data={"match_color": "false"},
+        files={
+            "image": ("target.png", image_bytes("RGB", (50, 60, 70)), "image/png"),
+            "part_mask": ("part.png", mask_bytes(filled=True), "image/png"),
+            "donor_image": ("donor.png", image_bytes("RGB", (120, 30, 20)), "image/png"),
+            "donor_mask": ("donor-mask.png", mask_bytes(filled=True), "image/png"),
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["operation"] == "donor_transfer"
+    assert payload["backend"] == "local-donor-align"
+    assert client.get(payload["result_url"]).status_code == 200
+    assert client.get(payload["donor_url"]).status_code == 200
+    assert client.get(payload["donor_mask_url"]).status_code == 200

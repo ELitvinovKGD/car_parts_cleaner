@@ -81,6 +81,28 @@ class DatasetStore:
         self.save_job(job)
         return job
 
+    def save_donor_inputs(
+        self,
+        job: JobRecord,
+        target: Image.Image,
+        target_masks: MaskBundle,
+        donor: Image.Image,
+        donor_masks: MaskBundle,
+    ) -> JobRecord:
+        """Save both sides of an experimental donor-transfer pair."""
+
+        self.save_inputs(job, target, target_masks)
+        raw_dir = self.root / "raw" / str(job.id)
+        annotation_dir = self.root / "annotations" / str(job.id)
+        donor_path = raw_dir / "donor.png"
+        donor_mask_path = annotation_dir / "donor_mask.png"
+        donor.convert("RGB").save(donor_path, format="PNG")
+        donor_masks.hard.save(donor_mask_path, format="PNG")
+        job.donor_path = donor_path
+        job.donor_mask_path = donor_mask_path
+        self.save_job(job)
+        return job
+
     def candidate_path(self, job: JobRecord, attempt: int = 1) -> Path:
         path = self.root / "candidates" / str(job.id) / f"attempt-{attempt:03d}.png"
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -108,4 +130,8 @@ class DatasetStore:
         destination = self.root / collection / str(job.id) / "result.png"
         destination.parent.mkdir(parents=True, exist_ok=True)
         copyfile(job.result_path, destination)
+        if job.donor_path is not None and job.donor_path.exists():
+            copyfile(job.donor_path, destination.parent / "donor.png")
+        if job.donor_mask_path is not None and job.donor_mask_path.exists():
+            copyfile(job.donor_mask_path, destination.parent / "donor_mask.png")
         return destination

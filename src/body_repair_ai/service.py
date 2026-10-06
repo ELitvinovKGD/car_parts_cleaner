@@ -7,6 +7,7 @@ from PIL import Image
 from body_repair_ai.config import Settings
 from body_repair_ai.domain import JobRecord, JobStatus, Operation
 from body_repair_ai.image_processing.crop import create_context_crop, restore_crop_to_canvas
+from body_repair_ai.image_processing.donor import transfer_donor_part
 from body_repair_ai.image_processing.masks import composite_result, prepare_masks
 from body_repair_ai.image_processing.semantic import SemanticMasks
 from body_repair_ai.image_processing.tiles import split_mask_into_tiles
@@ -186,4 +187,58 @@ class RestorationService:
         self.store.review_job(job, accepted=accepted)
         job.transition(JobStatus.ACCEPTED if accepted else JobStatus.REJECTED)
         self.store.save_job(job)
+        return job
+
+    def process_donor(
+        self,
+        target: Image.Image,
+        target_mask: Image.Image,
+        donor: Image.Image,
+        donor_mask: Image.Image,
+        *,
+        match_color: bool = True,
+    ) -> JobRecord:
+        target = target.convert("RGB")
+        donor = donor.convert("RGB")
+        target_masks = prepare_masks(
+            target_mask,
+            expected_size=target.size,
+            threshold=self.settings.mask_threshold,
+            feather_radius=self.settings.mask_feather_radius,
+        )
+        donor_masks = prepare_masks(
+            donor_mask,
+            expected_size=donor.size,
+            threshold=self.settings.mask_threshold,
+            feather_radius=self.settings.mask_feather_radius,
+        )
+        job = JobRecord(operation=Operation.DONOR_TRANSFER, backend="local-donor-align")
+        self.store.save_donor_inputs(job, target, target_masks, donor, donor_masks)
+        result_path = self.store.candidate_path(job)
+        try:
+            job.transition(JobStatus.PROCESSING)
+            self.store.save_job(job)
+            transfer = transfer_donor_part(
+                target,
+                target_masks,
+                donor,
+                donor_masks,
+                match_color=match_color,
+            )
+            transfer.aligned_donor.save(
+                self.store.work_path(job, "aligned-donor.png"), format="PNG"
+            )
+            transfer.composite_mask.save(
+                self.store.work_path(job, "composite-mask.png"), format="PNG"
+            )
+            transfer.image.save(result_path, format="PNG")
+            job.crop_box = transfer.target_box
+            job.model_input_size = donor.size
+            job.result_path = result_path
+            job.transition(JobStatus.COMPLETED)
+        except Exception as exc:
+            job.transition(JobStatus.FAILED, error=str(exc))
+            raise
+        finally:
+            self.store.save_job(job)
         return job
