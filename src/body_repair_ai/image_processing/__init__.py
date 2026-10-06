@@ -1,4 +1,5 @@
 from body_repair_ai.image_processing.crop import CropBundle, create_context_crop
+from body_repair_ai.image_processing.donor import DonorTransfer, transfer_donor_part
 from body_repair_ai.image_processing.masks import MaskBundle, prepare_masks
 from body_repair_ai.image_processing.semantic import (
     SemanticMasks,
@@ -9,6 +10,7 @@ from body_repair_ai.image_processing.tiles import split_mask_into_tiles
 
 __all__ = [
     "CropBundle",
+    "DonorTransfer",
     "MaskBundle",
     "SemanticMasks",
     "create_context_crop",
@@ -16,4 +18,5 @@ __all__ = [
     "parse_layer_masks",
     "prepare_masks",
     "split_mask_into_tiles",
+    "transfer_donor_part",
 ]

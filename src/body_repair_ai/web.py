@@ -40,6 +40,14 @@ def _public_job(job: JobRecord) -> dict[str, object]:
             name: f"/api/jobs/{job.id}/artifacts/{name}"
             for name in job.layer_mask_paths
         },
+        "donor_url": (
+            f"/api/jobs/{job.id}/artifacts/donor" if job.donor_path is not None else None
+        ),
+        "donor_mask_url": (
+            f"/api/jobs/{job.id}/artifacts/donor_mask"
+            if job.donor_mask_path is not None
+            else None
+        ),
         "completed_stages": job.completed_stages,
         "stage_tile_counts": job.stage_tile_counts,
         "result_url": (
@@ -203,6 +211,30 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ) from exc
         return _public_job(job)
 
+    @app.post("/api/donor-jobs", status_code=201)
+    async def create_donor_job(
+        image: Annotated[UploadFile, File()],
+        part_mask: Annotated[UploadFile, File()],
+        donor_image: Annotated[UploadFile, File()],
+        donor_mask: Annotated[UploadFile, File()],
+        match_color: Annotated[bool, Form()] = True,
+    ) -> dict[str, object]:
+        target = await _read_image(image, "Image")
+        target_mask = await _read_image(part_mask, "Part mask")
+        donor = await _read_image(donor_image, "Donor image")
+        donor_mask_image = await _read_image(donor_mask, "Donor mask")
+        try:
+            job = service.process_donor(
+                target,
+                target_mask,
+                donor,
+                donor_mask_image,
+                match_color=match_color,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return _public_job(job)
+
     @app.get("/api/jobs/{job_id}")
     def get_job(job_id: str) -> dict[str, object]:
         try:
@@ -220,6 +252,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "original": job.original_path,
             "mask": job.hard_mask_path,
             "result": job.result_path,
+            "donor": job.donor_path,
+            "donor_mask": job.donor_mask_path,
             **job.layer_mask_paths,
         }
         path = paths.get(artifact)

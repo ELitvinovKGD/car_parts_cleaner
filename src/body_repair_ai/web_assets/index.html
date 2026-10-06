@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Body Repair AI</title>
-    <link rel="stylesheet" href="/assets/styles.css?v=20261005-zoom">
+    <link rel="stylesheet" href="/assets/styles.css?v=20261006-donor">
   </head>
   <body>
     <main class="shell">
@@ -72,6 +72,47 @@
           </p>
         </section>
 
+        <details id="donor-panel" class="donor-panel">
+          <summary>Эксперимент: заменить деталь по хорошему фото-донору</summary>
+          <p class="legend-note">
+            Сначала выделите слой «Деталь» на исходной фотографии. Затем загрузите
+            хорошую фотографию такой же детали и выделите её через SAM 2.
+          </p>
+          <div class="donor-upload-row">
+            <label class="file-picker">
+              <strong>Фотография-донор</strong>
+              <span>Желательно тот же ракурс</span>
+              <input id="donor-image" type="file" accept="image/png,image/jpeg,image/webp">
+            </label>
+            <label class="file-picker">
+              <strong>Готовая маска донора</strong>
+              <span>Необязательно: белая деталь на чёрном фоне</span>
+              <input id="donor-mask-file" type="file" accept="image/png,image/jpeg,image/webp">
+            </label>
+          </div>
+          <div id="donor-editor" class="editor" hidden>
+            <div class="donor-tools">
+              <button id="donor-sam" class="secondary" type="button">SAM 2: выделить донора</button>
+              <button id="donor-clear" class="secondary" type="button">Очистить маску</button>
+              <label class="check-control">
+                <input id="donor-match-color" type="checkbox" checked>
+                Подогнать цвет и освещение
+              </label>
+            </div>
+            <div class="canvas-shell donor-canvas-shell">
+              <canvas id="donor-photo-canvas"></canvas>
+              <canvas id="donor-mask-canvas"></canvas>
+            </div>
+            <p class="legend-note">
+              Нажмите SAM 2 и протяните рамку вокруг детали-донора. Первый вариант
+              выравнивает детали по их границам; фон исходной фотографии не меняется.
+            </p>
+            <div class="controls">
+              <button id="donor-submit" type="button" disabled>Собрать по донору</button>
+            </div>
+          </div>
+        </details>
+
         <section class="controls">
           <button id="submit" type="submit" disabled>Обработать по этапам</button>
         </section>
@@ -135,6 +176,6 @@
         </figure>
       </div>
     </dialog>
-    <script src="/assets/app.js?v=20261005-zoom" defer></script>
+    <script src="/assets/app.js?v=20261006-donor" defer></script>
   </body>
 </html>

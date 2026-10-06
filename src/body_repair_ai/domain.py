@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 class Operation(StrEnum):
     MIXED_REPAIR = "mixed_repair"
+    DONOR_TRANSFER = "donor_transfer"
     REMOVE_DENT = "remove_dent"
     REMOVE_DIRT = "remove_dirt"
     REMOVE_SCRATCH = "remove_scratch"
@@ -34,6 +35,8 @@ class JobRecord(BaseModel):
     hard_mask_path: Path | None = None
     soft_mask_path: Path | None = None
     semantic_mask_path: Path | None = None
+    donor_path: Path | None = None
+    donor_mask_path: Path | None = None
     layer_mask_paths: dict[str, Path] = Field(default_factory=dict)
     completed_stages: list[Operation] = Field(default_factory=list)
     stage_tile_counts: dict[str, int] = Field(default_factory=dict)

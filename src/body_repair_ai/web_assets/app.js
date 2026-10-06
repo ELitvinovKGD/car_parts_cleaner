@@ -12,6 +12,16 @@ const message = document.querySelector("#message");
 const submit = document.querySelector("#submit");
 const resultPanel = document.querySelector("#result-panel");
 const detailDialog = document.querySelector("#detail-comparison-dialog");
+const donorInput = document.querySelector("#donor-image");
+const donorMaskInput = document.querySelector("#donor-mask-file");
+const donorEditor = document.querySelector("#donor-editor");
+const donorPhotoCanvas = document.querySelector("#donor-photo-canvas");
+const donorMaskCanvas = document.querySelector("#donor-mask-canvas");
+const donorPhotoContext = donorPhotoCanvas.getContext("2d");
+const donorMaskContext = donorMaskCanvas.getContext("2d");
+const donorLayerCanvas = document.createElement("canvas");
+const donorLayerContext = donorLayerCanvas.getContext("2d", { willReadFrequently: true });
+const donorSubmit = document.querySelector("#donor-submit");
 
 const layerDefinitions = {
   part: { label: "деталь", color: "rgba(0, 183, 255, 0.42)" },
@@ -38,6 +48,10 @@ let sourceFile = null;
 let history = [];
 let samBusy = false;
 let samStart = null;
+let donorFile = null;
+let donorSamReady = false;
+let donorSamStart = null;
+let donorSamBusy = false;
 
 function createSynchronizedZoom(root, statusElement) {
   const viewports = [...root.querySelectorAll(".zoom-viewport")];
@@ -335,6 +349,15 @@ function layerHasContent(name) {
   return false;
 }
 
+function canvasHasContent(canvas, context) {
+  if (!canvas.width || !canvas.height) return false;
+  const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+  for (let index = 3; index < pixels.length; index += 4) {
+    if (pixels[index] > 127) return true;
+  }
+  return false;
+}
+
 async function applySamMask(point, endPoint = null) {
   if (samBusy) return;
   if (activeLayer !== "part" && !layerHasContent("part")) {
@@ -506,6 +529,218 @@ function layerBlob(name) {
   });
 }
 
+function maskCanvasBlob(canvas) {
+  const output = document.createElement("canvas");
+  output.width = canvas.width;
+  output.height = canvas.height;
+  const context = output.getContext("2d");
+  context.fillStyle = "#000000";
+  context.fillRect(0, 0, output.width, output.height);
+  context.drawImage(canvas, 0, 0);
+  return new Promise((resolve, reject) => {
+    output.toBlob(
+      (blob) => blob ? resolve(blob) : reject(new Error("Не удалось создать маску.")),
+      "image/png",
+    );
+  });
+}
+
+function renderDonorOverlay() {
+  donorMaskContext.clearRect(0, 0, donorMaskCanvas.width, donorMaskCanvas.height);
+  donorMaskContext.fillStyle = "rgba(117, 230, 189, 0.48)";
+  donorMaskContext.fillRect(0, 0, donorMaskCanvas.width, donorMaskCanvas.height);
+  donorMaskContext.globalCompositeOperation = "destination-in";
+  donorMaskContext.drawImage(donorLayerCanvas, 0, 0);
+  donorMaskContext.globalCompositeOperation = "source-over";
+}
+
+function loadDonorMaskBlob(blob) {
+  const image = new Image();
+  image.onload = () => {
+    const temporary = document.createElement("canvas");
+    temporary.width = donorLayerCanvas.width;
+    temporary.height = donorLayerCanvas.height;
+    const context = temporary.getContext("2d", { willReadFrequently: true });
+    context.drawImage(image, 0, 0, temporary.width, temporary.height);
+    const pixels = context.getImageData(0, 0, temporary.width, temporary.height);
+    for (let index = 0; index < pixels.data.length; index += 4) {
+      const value = Math.max(pixels.data[index], pixels.data[index + 1], pixels.data[index + 2]);
+      pixels.data[index] = 255;
+      pixels.data[index + 1] = 255;
+      pixels.data[index + 2] = 255;
+      pixels.data[index + 3] = value;
+    }
+    donorLayerContext.clearRect(0, 0, donorLayerCanvas.width, donorLayerCanvas.height);
+    donorLayerContext.putImageData(pixels, 0, 0);
+    renderDonorOverlay();
+    donorSubmit.disabled = false;
+    URL.revokeObjectURL(image.src);
+  };
+  image.src = URL.createObjectURL(blob);
+}
+
+donorInput.addEventListener("change", () => {
+  const file = donorInput.files[0];
+  if (!file) return;
+  donorFile = file;
+  const image = new Image();
+  image.onload = () => {
+    [donorPhotoCanvas, donorMaskCanvas, donorLayerCanvas].forEach((canvas) => {
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+    });
+    donorPhotoContext.drawImage(image, 0, 0);
+    donorLayerContext.clearRect(0, 0, donorLayerCanvas.width, donorLayerCanvas.height);
+    renderDonorOverlay();
+    donorEditor.hidden = false;
+    donorSubmit.disabled = true;
+    message.textContent = `Донор загружен: ${image.naturalWidth}×${image.naturalHeight}. Выделите его деталь через SAM 2.`;
+    URL.revokeObjectURL(image.src);
+  };
+  image.src = URL.createObjectURL(file);
+});
+
+donorMaskInput.addEventListener("change", () => {
+  const file = donorMaskInput.files[0];
+  if (!file || !donorFile) {
+    message.textContent = "Сначала загрузите фотографию-донора.";
+    return;
+  }
+  loadDonorMaskBlob(file);
+  message.textContent = "Маска донора загружена.";
+});
+
+document.querySelector("#donor-sam").addEventListener("click", () => {
+  if (!donorFile) return;
+  donorSamReady = true;
+  donorMaskCanvas.classList.add("sam-ready");
+  message.textContent = "Протяните тесную рамку вокруг детали на фотографии-доноре.";
+});
+
+document.querySelector("#donor-clear").addEventListener("click", () => {
+  donorLayerContext.clearRect(0, 0, donorLayerCanvas.width, donorLayerCanvas.height);
+  renderDonorOverlay();
+  donorSubmit.disabled = true;
+  message.textContent = "Маска донора очищена.";
+});
+
+function donorPointFromEvent(event) {
+  const bounds = donorMaskCanvas.getBoundingClientRect();
+  return {
+    x: (event.clientX - bounds.left) * donorMaskCanvas.width / bounds.width,
+    y: (event.clientY - bounds.top) * donorMaskCanvas.height / bounds.height,
+  };
+}
+
+async function applyDonorSam(start, end = null) {
+  if (donorSamBusy || !donorFile) return;
+  donorSamBusy = true;
+  message.textContent = "SAM 2 выделяет деталь на фотографии-доноре…";
+  try {
+    const body = new FormData();
+    body.append("image", donorFile, donorFile.name);
+    body.append("x", start.x.toString());
+    body.append("y", start.y.toString());
+    if (end) {
+      body.append("x2", end.x.toString());
+      body.append("y2", end.y.toString());
+    }
+    const response = await fetch("/api/segment/part", { method: "POST", body });
+    if (!response.ok) {
+      const payload = await response.json();
+      throw new Error(payload.detail || "SAM 2 не смог выделить донора.");
+    }
+    loadDonorMaskBlob(await response.blob());
+    message.textContent = "Деталь-донор выделена. Можно запускать пробную замену.";
+  } catch (error) {
+    message.textContent = error.message;
+  } finally {
+    donorSamBusy = false;
+  }
+}
+
+donorMaskCanvas.addEventListener("pointerdown", (event) => {
+  if (!donorSamReady) return;
+  event.preventDefault();
+  donorSamStart = donorPointFromEvent(event);
+  donorMaskCanvas.setPointerCapture(event.pointerId);
+});
+
+donorMaskCanvas.addEventListener("pointermove", (event) => {
+  if (!donorSamStart) return;
+  event.preventDefault();
+  const point = donorPointFromEvent(event);
+  renderDonorOverlay();
+  donorMaskContext.save();
+  donorMaskContext.strokeStyle = "#75e6bd";
+  donorMaskContext.lineWidth = Math.max(2, donorMaskCanvas.width / 800);
+  donorMaskContext.setLineDash([12, 8]);
+  donorMaskContext.strokeRect(
+    donorSamStart.x,
+    donorSamStart.y,
+    point.x - donorSamStart.x,
+    point.y - donorSamStart.y,
+  );
+  donorMaskContext.restore();
+});
+
+donorMaskCanvas.addEventListener("pointerup", (event) => {
+  if (!donorSamStart) return;
+  const start = donorSamStart;
+  const end = donorPointFromEvent(event);
+  donorSamStart = null;
+  donorSamReady = false;
+  donorMaskCanvas.classList.remove("sam-ready");
+  renderDonorOverlay();
+  if (donorMaskCanvas.hasPointerCapture(event.pointerId)) {
+    donorMaskCanvas.releasePointerCapture(event.pointerId);
+  }
+  const distance = Math.hypot(end.x - start.x, end.y - start.y);
+  applyDonorSam(start, distance > 12 ? end : null);
+});
+
+function showJobResult(payload) {
+  currentJobId = payload.id;
+  const cacheKey = `?v=${Date.now()}`;
+  document.querySelector("#result-original").src = payload.original_url + cacheKey;
+  document.querySelector("#result-image").src = payload.result_url + cacheKey;
+  mainZoom.reset();
+  document.querySelector("#backend-badge").textContent = `backend: ${payload.backend}`;
+  resultPanel.hidden = false;
+  resultPanel.scrollIntoView({ behavior: "smooth" });
+}
+
+donorSubmit.addEventListener("click", async () => {
+  if (!sourceFile || !donorFile) return;
+  if (!layerHasContent("part")) {
+    message.textContent = "Сначала выделите слой «Деталь» на исходной фотографии.";
+    return;
+  }
+  if (!canvasHasContent(donorLayerCanvas, donorLayerContext)) {
+    message.textContent = "Сначала выделите деталь на фотографии-доноре.";
+    return;
+  }
+  donorSubmit.disabled = true;
+  message.textContent = "Выравниваем деталь-донора и подгоняем цвет…";
+  try {
+    const body = new FormData();
+    body.append("image", sourceFile, sourceFile.name);
+    body.append("part_mask", await layerBlob("part"), "part.png");
+    body.append("donor_image", donorFile, donorFile.name);
+    body.append("donor_mask", await maskCanvasBlob(donorLayerCanvas), "donor-mask.png");
+    body.append("match_color", document.querySelector("#donor-match-color").checked.toString());
+    const response = await fetch("/api/donor-jobs", { method: "POST", body });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.detail || "Не удалось собрать результат по донору.");
+    showJobResult(payload);
+    message.textContent = "Пробная замена по донору готова. Проверьте контуры и освещение в сравнении.";
+  } catch (error) {
+    message.textContent = error.message;
+  } finally {
+    donorSubmit.disabled = false;
+  }
+});
+
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!sourceFile) return;
@@ -520,14 +755,7 @@ form.addEventListener("submit", async (event) => {
     const response = await fetch("/api/jobs", { method: "POST", body });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.detail || "Не удалось создать задание.");
-    currentJobId = payload.id;
-    const cacheKey = `?v=${Date.now()}`;
-    document.querySelector("#result-original").src = payload.original_url + cacheKey;
-    document.querySelector("#result-image").src = payload.result_url + cacheKey;
-    mainZoom.reset();
-    document.querySelector("#backend-badge").textContent = `backend: ${payload.backend}`;
-    resultPanel.hidden = false;
-    resultPanel.scrollIntoView({ behavior: "smooth" });
+    showJobResult(payload);
     const stages = payload.completed_stages.join(" → ");
     message.textContent = payload.backend === "mock"
       ? `Слои сохранены (${stages}). Mock-режим не изменяет изображение.`
