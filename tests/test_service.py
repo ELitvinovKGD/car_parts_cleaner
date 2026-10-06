@@ -30,3 +30,24 @@ def test_service_runs_and_reviews_job(tmp_path: Path) -> None:
     reviewed = service.review(str(job.id), accepted=True)
     assert reviewed.status is JobStatus.ACCEPTED
     assert (settings.data_dir / "accepted" / str(job.id) / "result.png").exists()
+
+
+def test_service_tiles_a_long_mask_without_changing_output_size(tmp_path: Path) -> None:
+    settings = Settings(
+        data_dir=tmp_path / "data",
+        min_crop_edge=64,
+        max_model_edge=256,
+        max_mask_tile_span=100,
+    )
+    store = DatasetStore(settings.data_dir)
+    service = RestorationService(settings, store, MockInferenceEngine())
+    original = Image.new("RGB", (360, 120), color=(70, 80, 90))
+    mask = Image.new("L", original.size, color=0)
+    mask.paste(255, (20, 50, 340, 70))
+
+    job = service.process(original, mask, Operation.REMOVE_DIRT)
+
+    assert job.stage_tile_counts == {"remove_dirt": 4}
+    with Image.open(job.result_path) as result:
+        assert result.size == original.size
+        assert result.getpixel((180, 60)) == (70, 80, 90)

@@ -5,6 +5,7 @@ from body_repair_ai.image_processing.semantic import (
     parse_layer_masks,
     parse_semantic_mask,
 )
+from body_repair_ai.image_processing.tiles import split_mask_into_tiles
 
 __all__ = [
     "CropBundle",
@@ -14,4 +15,5 @@ __all__ = [
     "parse_semantic_mask",
     "parse_layer_masks",
     "prepare_masks",
+    "split_mask_into_tiles",
 ]

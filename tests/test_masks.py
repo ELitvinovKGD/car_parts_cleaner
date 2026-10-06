@@ -15,6 +15,7 @@ def test_prepare_masks_builds_binary_mask_and_bbox() -> None:
     assert bundle.bounding_box == (3, 2, 9, 7)
     assert set(np.unique(np.asarray(bundle.hard))) == {0, 255}
     assert bundle.soft.size == mask.size
+    assert np.all(np.asarray(bundle.soft)[np.asarray(bundle.hard) == 0] == 0)
 
 
 def test_prepare_masks_rejects_wrong_size() -> None:

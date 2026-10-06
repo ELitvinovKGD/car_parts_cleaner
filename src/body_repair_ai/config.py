@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     crop_padding_ratio: float = Field(default=0.5, ge=0.0, le=3.0)
     min_crop_edge: int = Field(default=512, ge=64, le=2048)
     max_model_edge: int = Field(default=1024, ge=256, le=4096)
+    max_mask_tile_span: int = Field(default=384, ge=64, le=2048)
 
 
 def get_settings() -> Settings:

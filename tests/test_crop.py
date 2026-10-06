@@ -22,7 +22,8 @@ def test_context_crop_adds_padding_and_uses_model_dimensions() -> None:
 
     assert crop.box == (600, 300, 1400, 900)
     assert crop.source_crop_size == (800, 600)
-    assert crop.image.size == (768, 576)
+    assert crop.image.size == (832, 640)
+    assert crop.content_box == (16, 20, 816, 620)
     assert crop.hard_mask.size == crop.image.size
 
 
@@ -69,3 +70,32 @@ def test_restore_crop_preserves_canvas_size() -> None:
     assert canvas.size == original.size
     assert canvas.getpixel((0, 0)) == (0, 0, 0)
     assert canvas.getpixel((125, 90)) == (255, 255, 255)
+
+
+def test_large_crop_keeps_aspect_ratio_in_model_content() -> None:
+    original = Image.new("RGB", (1280, 960), color="gray")
+    mask = Image.new("L", original.size, color=255)
+    masks = prepare_masks(mask, expected_size=original.size)
+
+    crop = create_context_crop(original, masks, min_crop_edge=64, max_edge=1024)
+
+    assert crop.image.size == (1024, 768)
+    assert crop.content_box == (0, 0, 1024, 768)
+    source_ratio = crop.source_crop_size[0] / crop.source_crop_size[1]
+    content_width = crop.content_box[2] - crop.content_box[0]
+    content_height = crop.content_box[3] - crop.content_box[1]
+    assert content_width / content_height == source_ratio
+
+
+def test_restore_removes_model_padding_before_resizing() -> None:
+    original = Image.new("RGB", (801, 601), color="black")
+    mask = Image.new("L", original.size, color=255)
+    masks = prepare_masks(mask, expected_size=original.size)
+    crop = create_context_crop(original, masks, min_crop_edge=64, max_edge=1024)
+    generated = Image.new("RGB", crop.image.size, color="red")
+
+    canvas = restore_crop_to_canvas(original, generated, crop)
+
+    assert canvas.size == original.size
+    assert canvas.getpixel((0, 0)) == (255, 0, 0)
+    assert canvas.getpixel((800, 600)) == (255, 0, 0)

@@ -36,6 +36,7 @@ class JobRecord(BaseModel):
     semantic_mask_path: Path | None = None
     layer_mask_paths: dict[str, Path] = Field(default_factory=dict)
     completed_stages: list[Operation] = Field(default_factory=list)
+    stage_tile_counts: dict[str, int] = Field(default_factory=dict)
     result_path: Path | None = None
     backend: str = "mock"
     seed: int | None = None

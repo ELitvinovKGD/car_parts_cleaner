@@ -41,6 +41,7 @@ def _public_job(job: JobRecord) -> dict[str, object]:
             for name in job.layer_mask_paths
         },
         "completed_stages": job.completed_stages,
+        "stage_tile_counts": job.stage_tile_counts,
         "result_url": (
             f"/api/jobs/{job.id}/artifacts/result" if job.result_path is not None else None
         ),

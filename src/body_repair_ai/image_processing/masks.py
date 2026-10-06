@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 import numpy as np
-from PIL import Image, ImageFilter
+from PIL import Image, ImageChops, ImageFilter
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,7 +39,10 @@ def prepare_masks(
     if bbox is None:  # Defensive: np.any above should already prevent this.
         raise ValueError("Mask does not contain an editable region.")
 
-    soft = hard.filter(ImageFilter.GaussianBlur(radius=feather_radius))
+    blurred = hard.filter(ImageFilter.GaussianBlur(radius=feather_radius))
+    # Feather inward only: a generated pixel must never leak outside the area
+    # explicitly selected by the user.
+    soft = ImageChops.darker(hard, blurred)
     return MaskBundle(hard=hard, soft=soft, bounding_box=bbox)
 
 
