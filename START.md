@@ -8,7 +8,7 @@
 
 Будут запущены:
 
-- интерфейс: <http://127.0.0.1:8000/?version=donor-transfer>
+- интерфейс: <http://127.0.0.1:8000/?version=reference-annotation>
 - ComfyUI: <http://127.0.0.1:8188>
 - SAM 2: <http://127.0.0.1:8190/health>
 

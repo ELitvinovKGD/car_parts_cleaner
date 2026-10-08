@@ -22,6 +22,10 @@ const donorMaskContext = donorMaskCanvas.getContext("2d");
 const donorLayerCanvas = document.createElement("canvas");
 const donorLayerContext = donorLayerCanvas.getContext("2d", { willReadFrequently: true });
 const donorSubmit = document.querySelector("#donor-submit");
+const referenceSelect = document.querySelector("#reference-select");
+const loadReferenceButton = document.querySelector("#load-reference");
+const saveReferenceButton = document.querySelector("#save-reference-annotation");
+const referenceTarget = document.querySelector("#reference-target");
 
 const layerDefinitions = {
   part: { label: "деталь", color: "rgba(0, 183, 255, 0.42)" },
@@ -52,6 +56,8 @@ let donorFile = null;
 let donorSamReady = false;
 let donorSamStart = null;
 let donorSamBusy = false;
+let referenceItems = [];
+let activeReferenceId = null;
 
 function createSynchronizedZoom(root, statusElement) {
   const viewports = [...root.querySelectorAll(".zoom-viewport")];
@@ -205,25 +211,36 @@ function renderOverlay() {
   }
 }
 
-fileInput.addEventListener("change", () => {
+function loadSourceFile(file, loadedMessage) {
+  sourceFile = file;
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      [photoCanvas, paintCanvas].forEach((canvas) => {
+        canvas.width = image.naturalWidth;
+        canvas.height = image.naturalHeight;
+      });
+      photoContext.drawImage(image, 0, 0);
+      resetLayers(image.naturalWidth, image.naturalHeight);
+      placeholder.hidden = true;
+      editor.hidden = false;
+      submit.disabled = false;
+      message.textContent = loadedMessage
+        || `Загружено ${image.naturalWidth}×${image.naturalHeight}. Начните с выделения детали.`;
+      URL.revokeObjectURL(image.src);
+      resolve();
+    };
+    image.onerror = () => reject(new Error("Не удалось открыть исходное изображение."));
+    image.src = URL.createObjectURL(file);
+  });
+}
+
+fileInput.addEventListener("change", async () => {
   const file = fileInput.files[0];
   if (!file) return;
-  sourceFile = file;
-  const image = new Image();
-  image.onload = () => {
-    [photoCanvas, paintCanvas].forEach((canvas) => {
-      canvas.width = image.naturalWidth;
-      canvas.height = image.naturalHeight;
-    });
-    photoContext.drawImage(image, 0, 0);
-    resetLayers(image.naturalWidth, image.naturalHeight);
-    placeholder.hidden = true;
-    editor.hidden = false;
-    submit.disabled = false;
-    message.textContent = `Загружено ${image.naturalWidth}×${image.naturalHeight}. Начните с выделения детали.`;
-    URL.revokeObjectURL(image.src);
-  };
-  image.src = URL.createObjectURL(file);
+  activeReferenceId = null;
+  referenceTarget.hidden = true;
+  await loadSourceFile(file);
 });
 
 document.querySelectorAll(".layer-tool").forEach((button) => {
@@ -544,6 +561,150 @@ function maskCanvasBlob(canvas) {
     );
   });
 }
+
+async function refreshReferenceList(preferredId = null) {
+  try {
+    const response = await fetch("/api/references");
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.detail || "Не удалось получить эталоны.");
+    referenceItems = payload.items;
+    referenceSelect.replaceChildren();
+    const placeholderOption = document.createElement("option");
+    placeholderOption.value = "";
+    placeholderOption.textContent = referenceItems.length
+      ? "Выберите папку с эталоном"
+      : "В data/references нет готовых пар";
+    referenceSelect.appendChild(placeholderOption);
+    for (const item of referenceItems) {
+      const option = document.createElement("option");
+      option.value = item.id;
+      const state = item.annotated ? " — размечен" : " — без разметки";
+      const sizeWarning = item.same_size ? "" : " — размеры не совпадают";
+      option.textContent = `${item.id}${state}${sizeWarning}`;
+      referenceSelect.appendChild(option);
+    }
+    const selectedId = preferredId || activeReferenceId;
+    if (selectedId && referenceItems.some((item) => item.id === selectedId)) {
+      referenceSelect.value = selectedId;
+    }
+    loadReferenceButton.disabled = !referenceSelect.value;
+  } catch (error) {
+    message.textContent = error.message;
+  }
+}
+
+async function drawMaskBlobToLayer(name, blob) {
+  const image = new Image();
+  await new Promise((resolve, reject) => {
+    image.onload = resolve;
+    image.onerror = () => reject(new Error(`Не удалось открыть маску ${name}.`));
+    image.src = URL.createObjectURL(blob);
+  });
+  const temporary = document.createElement("canvas");
+  temporary.width = photoCanvas.width;
+  temporary.height = photoCanvas.height;
+  const temporaryContext = temporary.getContext("2d", { willReadFrequently: true });
+  temporaryContext.drawImage(image, 0, 0, temporary.width, temporary.height);
+  const pixels = temporaryContext.getImageData(0, 0, temporary.width, temporary.height);
+  for (let index = 0; index < pixels.data.length; index += 4) {
+    const value = Math.max(pixels.data[index], pixels.data[index + 1], pixels.data[index + 2]);
+    pixels.data[index] = 255;
+    pixels.data[index + 1] = 255;
+    pixels.data[index + 2] = 255;
+    pixels.data[index + 3] = value;
+  }
+  layerContexts[name].putImageData(pixels, 0, 0);
+  URL.revokeObjectURL(image.src);
+}
+
+referenceSelect.addEventListener("change", () => {
+  loadReferenceButton.disabled = !referenceSelect.value;
+});
+
+document.querySelector("#refresh-references").addEventListener("click", () => {
+  refreshReferenceList();
+});
+
+loadReferenceButton.addEventListener("click", async () => {
+  const sampleId = referenceSelect.value;
+  if (!sampleId) return;
+  const item = referenceItems.find((candidate) => candidate.id === sampleId);
+  if (!item?.same_size) {
+    message.textContent = "Размеры before.png и approved_after.png должны совпадать.";
+    return;
+  }
+  loadReferenceButton.disabled = true;
+  message.textContent = `Открываем эталон «${sampleId}»…`;
+  try {
+    const encodedId = encodeURIComponent(sampleId);
+    const beforeResponse = await fetch(`/api/references/${encodedId}/artifacts/before`);
+    if (!beforeResponse.ok) throw new Error("Не удалось загрузить before.png.");
+    const beforeBlob = await beforeResponse.blob();
+    const beforeFile = new File([beforeBlob], "before.png", { type: beforeBlob.type || "image/png" });
+    await loadSourceFile(
+      beforeFile,
+      `Эталон «${sampleId}»: разметьте на исходнике деталь и исправленные дефекты.`,
+    );
+    activeReferenceId = sampleId;
+    document.querySelector("#reference-name").textContent = sampleId;
+    document.querySelector("#reference-after-image").src =
+      `/api/references/${encodedId}/artifacts/approved_after?v=${Date.now()}`;
+    referenceTarget.hidden = false;
+    saveReferenceButton.disabled = false;
+
+    if (item.annotated) {
+      for (const name of Object.keys(layerDefinitions)) {
+        const maskResponse = await fetch(
+          `/api/references/${encodedId}/artifacts/${name}_mask?v=${Date.now()}`,
+        );
+        if (!maskResponse.ok) throw new Error(`Не удалось загрузить сохранённый слой ${name}.`);
+        await drawMaskBlobToLayer(name, await maskResponse.blob());
+      }
+      renderOverlay();
+      message.textContent = `Эталон «${sampleId}» открыт вместе с сохранённой разметкой.`;
+    }
+    editor.scrollIntoView({ behavior: "smooth", block: "start" });
+  } catch (error) {
+    message.textContent = error.message;
+  } finally {
+    loadReferenceButton.disabled = !referenceSelect.value;
+  }
+});
+
+saveReferenceButton.addEventListener("click", async () => {
+  if (!activeReferenceId) return;
+  if (!layerHasContent("part")) {
+    message.textContent = "Сначала выделите слой «Деталь».";
+    return;
+  }
+  if (!["dent", "scratch", "dirt"].some(layerHasContent)) {
+    message.textContent = "Отметьте хотя бы один исправленный дефект.";
+    return;
+  }
+  saveReferenceButton.disabled = true;
+  message.textContent = "Сохраняем разметку и регистрируем эталон в датасете…";
+  try {
+    const body = new FormData();
+    for (const name of Object.keys(layerDefinitions)) {
+      body.append(`${name}_mask`, await layerBlob(name), `${name}.png`);
+    }
+    const encodedId = encodeURIComponent(activeReferenceId);
+    const response = await fetch(`/api/references/${encodedId}/annotations`, {
+      method: "POST",
+      body,
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.detail || "Не удалось сохранить разметку.");
+    await refreshReferenceList(activeReferenceId);
+    message.textContent = `Эталон сохранён в основной датасет. UUID: ${payload.dataset_job_id}.`;
+  } catch (error) {
+    message.textContent = error.message;
+  } finally {
+    saveReferenceButton.disabled = false;
+  }
+});
+
+refreshReferenceList();
 
 function renderDonorOverlay() {
   donorMaskContext.clearRect(0, 0, donorMaskCanvas.width, donorMaskCanvas.height);

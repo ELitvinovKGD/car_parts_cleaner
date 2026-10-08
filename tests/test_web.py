@@ -122,3 +122,56 @@ def test_donor_job_saves_pair_and_returns_result(tmp_path: Path) -> None:
     assert client.get(payload["result_url"]).status_code == 200
     assert client.get(payload["donor_url"]).status_code == 200
     assert client.get(payload["donor_mask_url"]).status_code == 200
+
+
+def test_reference_pair_can_be_annotated_and_imported(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    sample_dir = data_dir / "references" / "black-bumper"
+    sample_dir.mkdir(parents=True)
+    Image.new("RGB", (24, 24), (50, 60, 70)).save(sample_dir / "before.png")
+    Image.new("RGB", (24, 24), (40, 50, 60)).save(
+        sample_dir / "approved_after.png"
+    )
+
+    app = create_app(Settings(data_dir=data_dir, inference_backend="mock"))
+    client = TestClient(app)
+
+    listing = client.get("/api/references")
+    assert listing.status_code == 200
+    assert listing.json()["items"] == [
+        {
+            "id": "black-bumper",
+            "before_size": [24, 24],
+            "after_size": [24, 24],
+            "same_size": True,
+            "annotated": False,
+        }
+    ]
+
+    response = client.post(
+        "/api/references/black-bumper/annotations",
+        files={
+            "part_mask": ("part.png", mask_bytes(filled=True), "image/png"),
+            "dent_mask": ("dent.png", mask_bytes(), "image/png"),
+            "scratch_mask": ("scratch.png", mask_bytes(), "image/png"),
+            "dirt_mask": ("dirt.png", mask_bytes(filled=True), "image/png"),
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "accepted"
+    assert payload["backend"] == "external-reference"
+    job_id = payload["dataset_job_id"]
+
+    assert (data_dir / "raw" / job_id / "original.png").is_file()
+    assert (data_dir / "annotations" / job_id / "part.png").is_file()
+    assert (data_dir / "accepted" / job_id / "result.png").is_file()
+    assert (sample_dir / "protect_mask.png").is_file()
+    assert (sample_dir / "metadata.json").is_file()
+
+    artifact = client.get(
+        "/api/references/black-bumper/artifacts/approved_after"
+    )
+    assert artifact.status_code == 200
+    assert client.get("/api/references").json()["items"][0]["annotated"] is True

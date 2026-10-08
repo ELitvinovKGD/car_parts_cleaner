@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Body Repair AI</title>
-    <link rel="stylesheet" href="/assets/styles.css?v=20261006-donor">
+    <link rel="stylesheet" href="/assets/styles.css?v=20261009-reference">
   </head>
   <body>
     <main class="shell">
@@ -18,6 +18,42 @@
       </header>
 
       <form id="job-form" class="panel">
+        <section class="reference-loader">
+          <div>
+            <p class="eyebrow">Эталонные пары</p>
+            <h2>Разметка образцов «до → идеальное после»</h2>
+            <p class="legend-note">
+              Выберите папку из <code>data/references</code>. Разметка сохранится
+              в основной датасет без запуска ComfyUI.
+            </p>
+          </div>
+          <div class="reference-controls">
+            <select id="reference-select" aria-label="Папка эталонного образца">
+              <option value="">Эталонные папки не загружены</option>
+            </select>
+            <button id="refresh-references" class="secondary" type="button">Обновить список</button>
+            <button id="load-reference" class="secondary" type="button" disabled>Открыть образец</button>
+          </div>
+          <div id="reference-target" class="reference-target" hidden>
+            <figure>
+              <div class="reference-image-frame">
+                <img id="reference-after-image" alt="Идеальный результат эталонной пары">
+              </div>
+              <figcaption>Идеальное «после»</figcaption>
+            </figure>
+            <div>
+              <strong id="reference-name"></strong>
+              <p class="legend-note">
+                На исходнике ниже выделите деталь и отметьте дефекты, которые были
+                исправлены в этом результате.
+              </p>
+              <button id="save-reference-annotation" type="button">
+                Сохранить разметку в датасет
+              </button>
+            </div>
+          </div>
+        </section>
+
         <section class="upload-row">
           <label class="file-picker">
             <strong>Исходная фотография</strong>
@@ -176,6 +212,6 @@
         </figure>
       </div>
     </dialog>
-    <script src="/assets/app.js?v=20261006-donor" defer></script>
+    <script src="/assets/app.js?v=20261009-reference" defer></script>
   </body>
 </html>
