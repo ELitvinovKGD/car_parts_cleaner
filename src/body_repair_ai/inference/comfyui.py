@@ -13,23 +13,45 @@ from body_repair_ai.inference.base import InferenceRequest
 
 OPERATION_PROMPTS = {
     Operation.MIXED_REPAIR: (
-        "Restore only the marked defects on the painted automotive panel. Remove dents, dirt, "
-        "and scratches while preserving the existing paint color, reflections, lighting, panel "
-        "curvature, seams, and edges."
+        "Photorealistic local retouch of the exact same used automotive part. Edit only the "
+        "masked defects: gently remove dirt, visible scratches, scuffs and shallow dents. "
+        "Preserve the original silhouette, geometry, body lines, holes, fasteners, grille, "
+        "material, paint color, texture, lighting and natural reflections. Keep realistic wear."
     ),
     Operation.REMOVE_DENT: (
-        "Restore the smooth painted automotive panel inside the mask. Remove only the shallow "
-        "dent while continuing the existing paint color, reflections, lighting, and panel "
-        "curvature."
+        "Exact same used automotive part after a conservative local repair. Flatten only the "
+        "shallow dent inside the mask and continue the existing surface curvature and reflection. "
+        "Preserve geometry, silhouette, edges, body lines, seams, holes, fasteners, paint, "
+        "texture, lighting and every construction detail."
     ),
     Operation.REMOVE_DIRT: (
-        "Remove only the dirt inside the mask. Reconstruct the same painted automotive surface, "
-        "preserving color, reflections, lighting, and geometry."
+        "Exact same used automotive part after gentle cleaning. Remove only dirt, dust, sand and "
+        "stains inside the mask. Reveal the same underlying material without repainting or making "
+        "it new. Preserve geometry, texture, moderate gloss, lighting, reflections, holes, edges "
+        "and natural signs of use."
     ),
     Operation.REMOVE_SCRATCH: (
-        "Remove only the scratch inside the mask. Restore the original automotive paint and "
-        "continue the surrounding reflections and lighting naturally."
+        "Exact same used automotive part after conservative local retouch. Remove only the marked "
+        "visible scratch or scuff, continuing the surrounding paint texture, color, lighting and "
+        "reflection. Preserve geometry, silhouette, edges, seams, holes, fasteners and subtle "
+        "natural wear."
     ),
+}
+
+NEGATIVE_PROMPT = (
+    "changed shape, changed silhouette, changed proportions, moved object, resized object, changed "
+    "perspective, changed body line, warped edge, distorted grille, invented hole, missing hole, "
+    "invented fastener, missing fastener, altered seam, altered logo, altered text, new object, "
+    "changed background, changed shadow, changed lighting, changed color, excessive gloss, plastic "
+    "texture, brand new part, oversmoothed surface, fake reflection, repeating pattern, blur, "
+    "watermark, generative artifact"
+)
+
+OPERATION_DENOISE = {
+    Operation.MIXED_REPAIR: 0.36,
+    Operation.REMOVE_DENT: 0.38,
+    Operation.REMOVE_DIRT: 0.32,
+    Operation.REMOVE_SCRATCH: 0.34,
 }
 
 
@@ -113,6 +135,8 @@ class ComfyUIEngine:
                 "{{IMAGE}}": image_name,
                 "{{MASK}}": mask_name,
                 "{{PROMPT}}": OPERATION_PROMPTS[request.operation],
+                "{{NEGATIVE_PROMPT}}": NEGATIVE_PROMPT,
+                "{{DENOISE}}": OPERATION_DENOISE[request.operation],
                 "{{SEED}}": seed,
                 "{{OUTPUT_PREFIX}}": f"body-repair-{request_id}",
             },

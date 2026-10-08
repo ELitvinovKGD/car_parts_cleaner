@@ -42,7 +42,7 @@
   "7": {
     "class_type": "CLIPTextEncode",
     "inputs": {
-      "text": "new objects, changed panel shape, changed body lines, changed seams, changed color, text, logo, watermark, blur, low quality, artifacts",
+      "text": "{{NEGATIVE_PROMPT}}",
       "clip": ["1", 1]
     }
   },
@@ -54,7 +54,7 @@
       "cfg": 5.5,
       "sampler_name": "dpmpp_2m",
       "scheduler": "karras",
-      "denoise": 0.38,
+      "denoise": "{{DENOISE}}",
       "model": ["1", 0],
       "positive": ["6", 0],
       "negative": ["7", 0],

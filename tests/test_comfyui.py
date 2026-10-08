@@ -5,7 +5,13 @@ import httpx
 
 from body_repair_ai.domain import Operation
 from body_repair_ai.inference.base import InferenceRequest
-from body_repair_ai.inference.comfyui import ComfyUIEngine, render_workflow
+from body_repair_ai.inference.comfyui import (
+    NEGATIVE_PROMPT,
+    OPERATION_DENOISE,
+    OPERATION_PROMPTS,
+    ComfyUIEngine,
+    render_workflow,
+)
 
 
 def test_render_workflow_replaces_exact_placeholders() -> None:
@@ -30,7 +36,15 @@ def test_sdxl_workflow_contains_required_placeholders() -> None:
     workflow_path = Path("workflows/sdxl_inpaint_api.json")
     workflow_text = workflow_path.read_text(encoding="utf-8")
 
-    for placeholder in ("{{IMAGE}}", "{{MASK}}", "{{PROMPT}}", "{{SEED}}", "{{OUTPUT_PREFIX}}"):
+    for placeholder in (
+        "{{IMAGE}}",
+        "{{MASK}}",
+        "{{PROMPT}}",
+        "{{NEGATIVE_PROMPT}}",
+        "{{DENOISE}}",
+        "{{SEED}}",
+        "{{OUTPUT_PREFIX}}",
+    ):
         assert placeholder in workflow_text
 
     workflow = json.loads(workflow_text)
@@ -44,10 +58,34 @@ def test_sdxl_workflow_contains_required_placeholders() -> None:
     assert required_nodes <= class_types
 
 
+def test_operation_prompts_prioritize_geometry_preservation() -> None:
+    assert set(OPERATION_PROMPTS) == {
+        Operation.MIXED_REPAIR,
+        Operation.REMOVE_DENT,
+        Operation.REMOVE_DIRT,
+        Operation.REMOVE_SCRATCH,
+    }
+    assert all("geometry" in prompt for prompt in OPERATION_PROMPTS.values())
+    assert "changed silhouette" in NEGATIVE_PROMPT
+    assert OPERATION_DENOISE[Operation.REMOVE_DIRT] < OPERATION_DENOISE[Operation.REMOVE_DENT]
+
+
 def test_comfyui_engine_uploads_queues_and_downloads(tmp_path: Path) -> None:
     workflow_path = tmp_path / "workflow.json"
     workflow_path.write_text(
-        json.dumps({"1": {"inputs": {"image": "{{IMAGE}}", "mask": "{{MASK}}"}}}),
+        json.dumps(
+            {
+                "1": {
+                    "inputs": {
+                        "image": "{{IMAGE}}",
+                        "mask": "{{MASK}}",
+                        "positive": "{{PROMPT}}",
+                        "negative": "{{NEGATIVE_PROMPT}}",
+                        "denoise": "{{DENOISE}}",
+                    }
+                }
+            }
+        ),
         encoding="utf-8",
     )
     image_path = tmp_path / "image.png"
@@ -56,13 +94,15 @@ def test_comfyui_engine_uploads_queues_and_downloads(tmp_path: Path) -> None:
     mask_path.write_bytes(b"mask")
     output_path = tmp_path / "output.png"
     upload_count = 0
+    queued_workflow: dict[str, object] | None = None
 
     def handler(request: httpx.Request) -> httpx.Response:
-        nonlocal upload_count
+        nonlocal queued_workflow, upload_count
         if request.url.path == "/upload/image":
             upload_count += 1
             return httpx.Response(200, json={"name": f"uploaded-{upload_count}.png"})
         if request.url.path == "/prompt":
+            queued_workflow = json.loads(request.content)["prompt"]
             return httpx.Response(200, json={"prompt_id": "prompt-1"})
         if request.url.path == "/history/prompt-1":
             return httpx.Response(
@@ -101,3 +141,8 @@ def test_comfyui_engine_uploads_queues_and_downloads(tmp_path: Path) -> None:
 
     assert upload_count == 2
     assert result.read_bytes() == b"generated-image"
+    assert queued_workflow is not None
+    queued_inputs = queued_workflow["1"]["inputs"]
+    assert queued_inputs["positive"] == OPERATION_PROMPTS[Operation.REMOVE_DENT]
+    assert queued_inputs["negative"] == NEGATIVE_PROMPT
+    assert queued_inputs["denoise"] == OPERATION_DENOISE[Operation.REMOVE_DENT]
