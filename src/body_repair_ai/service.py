@@ -242,3 +242,79 @@ class RestorationService:
         finally:
             self.store.save_job(job)
         return job
+
+    def import_reference(
+        self,
+        sample_id: str,
+        semantic_masks: SemanticMasks,
+        *,
+        reference_quality: str,
+    ) -> JobRecord:
+        if reference_quality not in {"pixel_aligned", "visual_reference"}:
+            raise ValueError("Unknown reference quality.")
+        before_path = self.store.reference_artifact_path(sample_id, "before")
+        after_path = self.store.reference_artifact_path(sample_id, "approved_after")
+        with Image.open(before_path) as source_image, Image.open(after_path) as target_image:
+            before = source_image.convert("RGB").copy()
+            approved_after = target_image.convert("RGB").copy()
+        if reference_quality == "pixel_aligned" and before.size != approved_after.size:
+            raise ValueError("Before and approved-after images must have equal sizes.")
+
+        combined_masks = prepare_masks(
+            semantic_masks.editable,
+            expected_size=before.size,
+            threshold=self.settings.mask_threshold,
+            feather_radius=self.settings.mask_feather_radius,
+        )
+        metadata = self.store.save_reference_annotations(
+            sample_id,
+            semantic_masks,
+            image_size=before.size,
+            reference_quality=reference_quality,
+        )
+        existing_job_id = metadata.get("dataset_job_id")
+        job: JobRecord | None = None
+        if isinstance(existing_job_id, str):
+            try:
+                job = self.store.load_job(existing_job_id)
+            except FileNotFoundError:
+                job = None
+
+        if job is None:
+            job = JobRecord(
+                operation=Operation.EXTERNAL_REFERENCE,
+                backend="external-reference",
+            )
+            self.store.save_layer_inputs(job, before, combined_masks, semantic_masks)
+        else:
+            if job.backend != "external-reference":
+                raise ValueError("Reference points to a non-reference dataset job.")
+            if job.hard_mask_path is None or job.soft_mask_path is None:
+                raise ValueError("Reference dataset job has incomplete mask paths.")
+            combined_masks.hard.save(job.hard_mask_path, format="PNG")
+            combined_masks.soft.save(job.soft_mask_path, format="PNG")
+            for name in ("part", "dent", "scratch", "dirt"):
+                path = job.layer_mask_paths.get(name)
+                if path is None:
+                    raise ValueError("Reference dataset job has incomplete layer paths.")
+                getattr(semantic_masks, name).save(path, format="PNG")
+
+        collection = (
+            "accepted" if reference_quality == "pixel_aligned" else "visual_references"
+        )
+        result_path = self.store.root / collection / str(job.id) / "result.png"
+        result_path.parent.mkdir(parents=True, exist_ok=True)
+        approved_after.save(result_path, format="PNG")
+        other_collection = (
+            "visual_references" if collection == "accepted" else "accepted"
+        )
+        stale_result = self.store.root / other_collection / str(job.id) / "result.png"
+        if stale_result.is_file():
+            stale_result.unlink()
+        job.result_path = result_path
+        job.status = JobStatus.ACCEPTED
+        self.store.save_job(job)
+        metadata["dataset_job_id"] = str(job.id)
+        metadata["dataset_collection"] = collection
+        self.store.save_reference_metadata(sample_id, metadata)
+        return job

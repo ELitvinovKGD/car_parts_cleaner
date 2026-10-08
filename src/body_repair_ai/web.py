@@ -235,6 +235,67 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         return _public_job(job)
 
+    @app.get("/api/references")
+    def list_references() -> dict[str, object]:
+        return {"items": store.list_references()}
+
+    @app.get(
+        "/api/references/{sample_id}/artifacts/{artifact}",
+        response_class=FileResponse,
+    )
+    def get_reference_artifact(sample_id: str, artifact: str) -> FileResponse:
+        try:
+            path = store.reference_artifact_path(sample_id, artifact)
+        except (FileNotFoundError, ValueError):
+            raise HTTPException(status_code=404, detail="Reference artifact not found.") from None
+        return FileResponse(path)
+
+    @app.post("/api/references/{sample_id}/annotations")
+    async def save_reference_annotations(
+        sample_id: str,
+        reference_quality: Annotated[str, Form()],
+        part_mask: Annotated[UploadFile, File()],
+        dent_mask: Annotated[UploadFile, File()],
+        dirt_mask: Annotated[UploadFile, File()],
+        scratch_mask: Annotated[UploadFile, File()],
+    ) -> dict[str, object]:
+        try:
+            before_path = store.reference_artifact_path(sample_id, "before")
+            with Image.open(before_path) as before_image:
+                expected_size = before_image.size
+            part_image, dent_image, dirt_image, scratch_image = [
+                await _read_image(upload, "Reference layer mask")
+                for upload in (part_mask, dent_mask, dirt_mask, scratch_mask)
+            ]
+            semantic_masks = parse_layer_masks(
+                part=part_image,
+                dent=dent_image,
+                dirt=dirt_image,
+                scratch=scratch_image,
+                expected_size=expected_size,
+            )
+            job = service.import_reference(
+                sample_id,
+                semantic_masks,
+                reference_quality=reference_quality,
+            )
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="Reference sample not found.") from None
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return {
+            "sample_id": sample_id,
+            "dataset_job_id": str(job.id),
+            "status": job.status,
+            "backend": job.backend,
+            "reference_quality": reference_quality,
+            "dataset_collection": (
+                "accepted"
+                if reference_quality == "pixel_aligned"
+                else "visual_references"
+            ),
+        }
+
     @app.get("/api/jobs/{job_id}")
     def get_job(job_id: str) -> dict[str, object]:
         try:

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from shutil import copyfile
 
-from PIL import Image
+from PIL import Image, ImageChops
 
 from body_repair_ai.domain import JobRecord
 from body_repair_ai.image_processing import MaskBundle, SemanticMasks
@@ -22,10 +23,12 @@ class DatasetStore:
             "annotations",
             "candidates",
             "accepted",
+            "visual_references",
             "rejected",
             "exports",
             "jobs",
             "work",
+            "references",
         ):
             (self.root / name).mkdir(parents=True, exist_ok=True)
 
@@ -135,3 +138,128 @@ class DatasetStore:
         if job.donor_mask_path is not None and job.donor_mask_path.exists():
             copyfile(job.donor_mask_path, destination.parent / "donor_mask.png")
         return destination
+
+    def _reference_dir(self, sample_id: str) -> Path:
+        if not sample_id or Path(sample_id).name != sample_id or sample_id in {".", ".."}:
+            raise ValueError("Invalid reference sample id.")
+        root = (self.root / "references").resolve()
+        path = (root / sample_id).resolve()
+        if path.parent != root:
+            raise ValueError("Invalid reference sample id.")
+        return path
+
+    def list_references(self) -> list[dict[str, object]]:
+        self.initialize()
+        items: list[dict[str, object]] = []
+        for path in sorted((self.root / "references").iterdir(), key=lambda item: item.name):
+            if not path.is_dir():
+                continue
+            before = path / "before.png"
+            approved_after = path / "approved_after.png"
+            if not before.is_file() or not approved_after.is_file():
+                continue
+            with Image.open(before) as before_image, Image.open(approved_after) as after_image:
+                before_size = before_image.size
+                after_size = after_image.size
+            metadata: dict[str, object] = {}
+            metadata_path = path / "metadata.json"
+            if metadata_path.is_file():
+                try:
+                    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+                except (json.JSONDecodeError, OSError):
+                    metadata = {}
+            reference_quality = metadata.get("reference_quality")
+            if reference_quality not in {"pixel_aligned", "visual_reference"}:
+                reference_quality = None
+            mask_names = ("part_mask", "dent_mask", "scratch_mask", "dirt_mask")
+            annotated = all((path / f"{name}.png").is_file() for name in mask_names)
+            items.append(
+                {
+                    "id": path.name,
+                    "before_size": before_size,
+                    "after_size": after_size,
+                    "same_size": before_size == after_size,
+                    "annotated": annotated,
+                    "reference_quality": reference_quality,
+                }
+            )
+        return items
+
+    def reference_artifact_path(self, sample_id: str, artifact: str) -> Path:
+        filenames = {
+            "before": "before.png",
+            "approved_after": "approved_after.png",
+            "part_mask": "part_mask.png",
+            "dent_mask": "dent_mask.png",
+            "scratch_mask": "scratch_mask.png",
+            "dirt_mask": "dirt_mask.png",
+            "protect_mask": "protect_mask.png",
+            "editable_mask": "editable_mask.png",
+            "metadata": "metadata.json",
+        }
+        filename = filenames.get(artifact)
+        if filename is None:
+            raise ValueError("Unknown reference artifact.")
+        path = self._reference_dir(sample_id) / filename
+        if not path.is_file():
+            raise FileNotFoundError(path)
+        return path
+
+    def save_reference_annotations(
+        self,
+        sample_id: str,
+        masks: SemanticMasks,
+        *,
+        image_size: tuple[int, int],
+        reference_quality: str,
+    ) -> dict[str, object]:
+        if reference_quality not in {"pixel_aligned", "visual_reference"}:
+            raise ValueError("Unknown reference quality.")
+        sample_dir = self._reference_dir(sample_id)
+        if not sample_dir.is_dir():
+            raise FileNotFoundError(sample_dir)
+        for name in ("part", "dent", "scratch", "dirt"):
+            getattr(masks, name).convert("L").save(
+                sample_dir / f"{name}_mask.png",
+                format="PNG",
+            )
+        masks.editable.convert("L").save(sample_dir / "editable_mask.png", format="PNG")
+        protect = ImageChops.subtract(masks.part.convert("L"), masks.editable.convert("L"))
+        protect.save(sample_dir / "protect_mask.png", format="PNG")
+
+        metadata_path = sample_dir / "metadata.json"
+        metadata: dict[str, object] = {}
+        if metadata_path.is_file():
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        metadata.update(
+            {
+                "id": sample_id,
+                "source": "external_reference",
+                "synthetic_target": True,
+                "accepted": True,
+                "original": "before.png",
+                "target": "approved_after.png",
+                "image_size": list(image_size),
+                "reference_quality": reference_quality,
+                "labels_present": list(masks.labels_present),
+                "annotated": True,
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+        )
+        metadata_path.write_text(
+            json.dumps(metadata, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        return metadata
+
+    def save_reference_metadata(
+        self,
+        sample_id: str,
+        metadata: dict[str, object],
+    ) -> Path:
+        path = self._reference_dir(sample_id) / "metadata.json"
+        path.write_text(
+            json.dumps(metadata, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        return path

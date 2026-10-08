@@ -122,3 +122,111 @@ def test_donor_job_saves_pair_and_returns_result(tmp_path: Path) -> None:
     assert client.get(payload["result_url"]).status_code == 200
     assert client.get(payload["donor_url"]).status_code == 200
     assert client.get(payload["donor_mask_url"]).status_code == 200
+
+
+def test_reference_pair_can_be_annotated_and_imported(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    sample_dir = data_dir / "references" / "black-bumper"
+    sample_dir.mkdir(parents=True)
+    Image.new("RGB", (24, 24), (50, 60, 70)).save(sample_dir / "before.png")
+    Image.new("RGB", (24, 24), (40, 50, 60)).save(
+        sample_dir / "approved_after.png"
+    )
+
+    app = create_app(Settings(data_dir=data_dir, inference_backend="mock"))
+    client = TestClient(app)
+
+    listing = client.get("/api/references")
+    assert listing.status_code == 200
+    assert listing.json()["items"] == [
+        {
+            "id": "black-bumper",
+            "before_size": [24, 24],
+            "after_size": [24, 24],
+            "same_size": True,
+            "annotated": False,
+            "reference_quality": None,
+        }
+    ]
+
+    response = client.post(
+        "/api/references/black-bumper/annotations",
+        data={"reference_quality": "visual_reference"},
+        files={
+            "part_mask": ("part.png", mask_bytes(filled=True), "image/png"),
+            "dent_mask": ("dent.png", mask_bytes(), "image/png"),
+            "scratch_mask": ("scratch.png", mask_bytes(), "image/png"),
+            "dirt_mask": ("dirt.png", mask_bytes(filled=True), "image/png"),
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "accepted"
+    assert payload["backend"] == "external-reference"
+    assert payload["reference_quality"] == "visual_reference"
+    assert payload["dataset_collection"] == "visual_references"
+    job_id = payload["dataset_job_id"]
+
+    assert (data_dir / "raw" / job_id / "original.png").is_file()
+    assert (data_dir / "annotations" / job_id / "part.png").is_file()
+    assert (data_dir / "visual_references" / job_id / "result.png").is_file()
+    assert (sample_dir / "protect_mask.png").is_file()
+    assert (sample_dir / "metadata.json").is_file()
+
+    artifact = client.get(
+        "/api/references/black-bumper/artifacts/approved_after"
+    )
+    assert artifact.status_code == 200
+    listed = client.get("/api/references").json()["items"][0]
+    assert listed["annotated"] is True
+    assert listed["reference_quality"] == "visual_reference"
+
+    reclassified = client.post(
+        "/api/references/black-bumper/annotations",
+        data={"reference_quality": "pixel_aligned"},
+        files={
+            "part_mask": ("part.png", mask_bytes(filled=True), "image/png"),
+            "dent_mask": ("dent.png", mask_bytes(), "image/png"),
+            "scratch_mask": ("scratch.png", mask_bytes(), "image/png"),
+            "dirt_mask": ("dirt.png", mask_bytes(filled=True), "image/png"),
+        },
+    )
+    assert reclassified.status_code == 200
+    assert reclassified.json()["dataset_job_id"] == job_id
+    assert (data_dir / "accepted" / job_id / "result.png").is_file()
+    assert not (data_dir / "visual_references" / job_id / "result.png").exists()
+
+
+def test_visual_reference_allows_a_different_target_size(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    sample_dir = data_dir / "references" / "shifted-bumper"
+    sample_dir.mkdir(parents=True)
+    Image.new("RGB", (24, 24), (50, 60, 70)).save(sample_dir / "before.png")
+    Image.new("RGB", (24, 25), (40, 50, 60)).save(
+        sample_dir / "approved_after.png"
+    )
+    client = TestClient(
+        create_app(Settings(data_dir=data_dir, inference_backend="mock"))
+    )
+    files = {
+        "part_mask": ("part.png", mask_bytes(filled=True), "image/png"),
+        "dent_mask": ("dent.png", mask_bytes(), "image/png"),
+        "scratch_mask": ("scratch.png", mask_bytes(), "image/png"),
+        "dirt_mask": ("dirt.png", mask_bytes(filled=True), "image/png"),
+    }
+
+    visual = client.post(
+        "/api/references/shifted-bumper/annotations",
+        data={"reference_quality": "visual_reference"},
+        files=files,
+    )
+    assert visual.status_code == 200
+    assert visual.json()["dataset_collection"] == "visual_references"
+
+    exact = client.post(
+        "/api/references/shifted-bumper/annotations",
+        data={"reference_quality": "pixel_aligned"},
+        files=files,
+    )
+    assert exact.status_code == 422
