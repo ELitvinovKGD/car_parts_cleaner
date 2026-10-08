@@ -247,13 +247,17 @@ class RestorationService:
         self,
         sample_id: str,
         semantic_masks: SemanticMasks,
+        *,
+        reference_quality: str,
     ) -> JobRecord:
+        if reference_quality not in {"pixel_aligned", "visual_reference"}:
+            raise ValueError("Unknown reference quality.")
         before_path = self.store.reference_artifact_path(sample_id, "before")
         after_path = self.store.reference_artifact_path(sample_id, "approved_after")
         with Image.open(before_path) as source_image, Image.open(after_path) as target_image:
             before = source_image.convert("RGB").copy()
             approved_after = target_image.convert("RGB").copy()
-        if before.size != approved_after.size:
+        if reference_quality == "pixel_aligned" and before.size != approved_after.size:
             raise ValueError("Before and approved-after images must have equal sizes.")
 
         combined_masks = prepare_masks(
@@ -266,6 +270,7 @@ class RestorationService:
             sample_id,
             semantic_masks,
             image_size=before.size,
+            reference_quality=reference_quality,
         )
         existing_job_id = metadata.get("dataset_job_id")
         job: JobRecord | None = None
@@ -294,13 +299,22 @@ class RestorationService:
                     raise ValueError("Reference dataset job has incomplete layer paths.")
                 getattr(semantic_masks, name).save(path, format="PNG")
 
-        accepted_path = self.store.root / "accepted" / str(job.id) / "result.png"
-        accepted_path.parent.mkdir(parents=True, exist_ok=True)
-        approved_after.save(accepted_path, format="PNG")
-        job.result_path = accepted_path
+        collection = (
+            "accepted" if reference_quality == "pixel_aligned" else "visual_references"
+        )
+        result_path = self.store.root / collection / str(job.id) / "result.png"
+        result_path.parent.mkdir(parents=True, exist_ok=True)
+        approved_after.save(result_path, format="PNG")
+        other_collection = (
+            "visual_references" if collection == "accepted" else "accepted"
+        )
+        stale_result = self.store.root / other_collection / str(job.id) / "result.png"
+        if stale_result.is_file():
+            stale_result.unlink()
+        job.result_path = result_path
         job.status = JobStatus.ACCEPTED
         self.store.save_job(job)
         metadata["dataset_job_id"] = str(job.id)
-        metadata["dataset_collection"] = "accepted"
+        metadata["dataset_collection"] = collection
         self.store.save_reference_metadata(sample_id, metadata)
         return job

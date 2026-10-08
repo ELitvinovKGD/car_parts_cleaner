@@ -253,6 +253,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/references/{sample_id}/annotations")
     async def save_reference_annotations(
         sample_id: str,
+        reference_quality: Annotated[str, Form()],
         part_mask: Annotated[UploadFile, File()],
         dent_mask: Annotated[UploadFile, File()],
         dirt_mask: Annotated[UploadFile, File()],
@@ -273,7 +274,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 scratch=scratch_image,
                 expected_size=expected_size,
             )
-            job = service.import_reference(sample_id, semantic_masks)
+            job = service.import_reference(
+                sample_id,
+                semantic_masks,
+                reference_quality=reference_quality,
+            )
         except FileNotFoundError:
             raise HTTPException(status_code=404, detail="Reference sample not found.") from None
         except ValueError as exc:
@@ -283,6 +288,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "dataset_job_id": str(job.id),
             "status": job.status,
             "backend": job.backend,
+            "reference_quality": reference_quality,
+            "dataset_collection": (
+                "accepted"
+                if reference_quality == "pixel_aligned"
+                else "visual_references"
+            ),
         }
 
     @app.get("/api/jobs/{job_id}")

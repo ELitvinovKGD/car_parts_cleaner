@@ -26,6 +26,9 @@ const referenceSelect = document.querySelector("#reference-select");
 const loadReferenceButton = document.querySelector("#load-reference");
 const saveReferenceButton = document.querySelector("#save-reference-annotation");
 const referenceTarget = document.querySelector("#reference-target");
+const referenceWorkspace = document.querySelector("#reference-workspace");
+const workspaceTabs = [...document.querySelectorAll("[data-workspace-tab]")];
+const repairOnlyElements = [...document.querySelectorAll(".repair-only")];
 
 const layerDefinitions = {
   part: { label: "деталь", color: "rgba(0, 183, 255, 0.42)" },
@@ -58,6 +61,46 @@ let donorSamStart = null;
 let donorSamBusy = false;
 let referenceItems = [];
 let activeReferenceId = null;
+let activeWorkspace = "repair";
+
+const referenceQualityLabels = {
+  pixel_aligned: "полное совпадение",
+  visual_reference: "визуальный референс",
+};
+
+function selectReferenceQuality(value) {
+  const quality = value || "visual_reference";
+  document.querySelectorAll('input[name="reference-quality"]').forEach((input) => {
+    input.checked = input.value === quality;
+  });
+}
+
+function switchWorkspace(workspace) {
+  if (workspace === activeWorkspace) return;
+  activeWorkspace = workspace;
+  workspaceTabs.forEach((button) => {
+    button.classList.toggle("active", button.dataset.workspaceTab === workspace);
+  });
+  referenceWorkspace.hidden = workspace !== "references";
+  repairOnlyElements.forEach((element) => {
+    element.hidden = workspace !== "repair";
+  });
+  sourceFile = null;
+  activeReferenceId = null;
+  fileInput.value = "";
+  editor.hidden = true;
+  referenceTarget.hidden = true;
+  resultPanel.hidden = true;
+  submit.disabled = true;
+  message.textContent = workspace === "references"
+    ? "Выберите эталонную папку и откройте её для разметки."
+    : "Загрузите фотографию для обработки.";
+  if (workspace === "references") refreshReferenceList();
+}
+
+workspaceTabs.forEach((button) => {
+  button.addEventListener("click", () => switchWorkspace(button.dataset.workspaceTab));
+});
 
 function createSynchronizedZoom(root, statusElement) {
   const viewports = [...root.querySelectorAll(".zoom-viewport")];
@@ -579,8 +622,11 @@ async function refreshReferenceList(preferredId = null) {
       const option = document.createElement("option");
       option.value = item.id;
       const state = item.annotated ? " — размечен" : " — без разметки";
+      const quality = item.reference_quality
+        ? ` — ${referenceQualityLabels[item.reference_quality]}`
+        : "";
       const sizeWarning = item.same_size ? "" : " — размеры не совпадают";
-      option.textContent = `${item.id}${state}${sizeWarning}`;
+      option.textContent = `${item.id}${state}${quality}${sizeWarning}`;
       referenceSelect.appendChild(option);
     }
     const selectedId = preferredId || activeReferenceId;
@@ -629,10 +675,7 @@ loadReferenceButton.addEventListener("click", async () => {
   const sampleId = referenceSelect.value;
   if (!sampleId) return;
   const item = referenceItems.find((candidate) => candidate.id === sampleId);
-  if (!item?.same_size) {
-    message.textContent = "Размеры before.png и approved_after.png должны совпадать.";
-    return;
-  }
+  if (!item) return;
   loadReferenceButton.disabled = true;
   message.textContent = `Открываем эталон «${sampleId}»…`;
   try {
@@ -651,6 +694,13 @@ loadReferenceButton.addEventListener("click", async () => {
       `/api/references/${encodedId}/artifacts/approved_after?v=${Date.now()}`;
     referenceTarget.hidden = false;
     saveReferenceButton.disabled = false;
+    const exactQualityInput = document.querySelector(
+      'input[name="reference-quality"][value="pixel_aligned"]',
+    );
+    exactQualityInput.disabled = !item.same_size;
+    selectReferenceQuality(
+      item.same_size ? item.reference_quality : "visual_reference",
+    );
 
     if (item.annotated) {
       for (const name of Object.keys(layerDefinitions)) {
@@ -662,6 +712,8 @@ loadReferenceButton.addEventListener("click", async () => {
       }
       renderOverlay();
       message.textContent = `Эталон «${sampleId}» открыт вместе с сохранённой разметкой.`;
+    } else if (!item.same_size) {
+      message.textContent = "Размеры изображений различаются: доступен только «Визуальный референс».";
     }
     editor.scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (error) {
@@ -685,6 +737,9 @@ saveReferenceButton.addEventListener("click", async () => {
   message.textContent = "Сохраняем разметку и регистрируем эталон в датасете…";
   try {
     const body = new FormData();
+    const quality = document.querySelector('input[name="reference-quality"]:checked')?.value;
+    if (!quality) throw new Error("Выберите тип эталона.");
+    body.append("reference_quality", quality);
     for (const name of Object.keys(layerDefinitions)) {
       body.append(`${name}_mask`, await layerBlob(name), `${name}.png`);
     }
@@ -696,7 +751,10 @@ saveReferenceButton.addEventListener("click", async () => {
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.detail || "Не удалось сохранить разметку.");
     await refreshReferenceList(activeReferenceId);
-    message.textContent = `Эталон сохранён в основной датасет. UUID: ${payload.dataset_job_id}.`;
+    const destination = payload.reference_quality === "pixel_aligned"
+      ? "точные пары"
+      : "визуальные референсы";
+    message.textContent = `Эталон сохранён в коллекцию «${destination}». UUID: ${payload.dataset_job_id}.`;
   } catch (error) {
     message.textContent = error.message;
   } finally {

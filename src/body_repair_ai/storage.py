@@ -23,6 +23,7 @@ class DatasetStore:
             "annotations",
             "candidates",
             "accepted",
+            "visual_references",
             "rejected",
             "exports",
             "jobs",
@@ -160,6 +161,16 @@ class DatasetStore:
             with Image.open(before) as before_image, Image.open(approved_after) as after_image:
                 before_size = before_image.size
                 after_size = after_image.size
+            metadata: dict[str, object] = {}
+            metadata_path = path / "metadata.json"
+            if metadata_path.is_file():
+                try:
+                    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+                except (json.JSONDecodeError, OSError):
+                    metadata = {}
+            reference_quality = metadata.get("reference_quality")
+            if reference_quality not in {"pixel_aligned", "visual_reference"}:
+                reference_quality = None
             mask_names = ("part_mask", "dent_mask", "scratch_mask", "dirt_mask")
             annotated = all((path / f"{name}.png").is_file() for name in mask_names)
             items.append(
@@ -169,6 +180,7 @@ class DatasetStore:
                     "after_size": after_size,
                     "same_size": before_size == after_size,
                     "annotated": annotated,
+                    "reference_quality": reference_quality,
                 }
             )
         return items
@@ -199,7 +211,10 @@ class DatasetStore:
         masks: SemanticMasks,
         *,
         image_size: tuple[int, int],
+        reference_quality: str,
     ) -> dict[str, object]:
+        if reference_quality not in {"pixel_aligned", "visual_reference"}:
+            raise ValueError("Unknown reference quality.")
         sample_dir = self._reference_dir(sample_id)
         if not sample_dir.is_dir():
             raise FileNotFoundError(sample_dir)
@@ -225,6 +240,7 @@ class DatasetStore:
                 "original": "before.png",
                 "target": "approved_after.png",
                 "image_size": list(image_size),
+                "reference_quality": reference_quality,
                 "labels_present": list(masks.labels_present),
                 "annotated": True,
                 "updated_at": datetime.now(UTC).isoformat(),

@@ -8,7 +8,7 @@
 
 Будут запущены:
 
-- интерфейс: <http://127.0.0.1:8000/?version=reference-annotation>
+- интерфейс: <http://127.0.0.1:8000/?version=reference-tabs>
 - ComfyUI: <http://127.0.0.1:8188>
 - SAM 2: <http://127.0.0.1:8190/health>
 

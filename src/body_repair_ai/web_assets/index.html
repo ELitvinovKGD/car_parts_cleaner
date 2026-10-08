@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Body Repair AI</title>
-    <link rel="stylesheet" href="/assets/styles.css?v=20261009-reference">
+    <link rel="stylesheet" href="/assets/styles.css?v=20261009-reference-tabs">
   </head>
   <body>
     <main class="shell">
@@ -17,8 +17,17 @@
         <div class="status"><span></span> Данные остаются на этом компьютере</div>
       </header>
 
+      <nav class="workspace-tabs" aria-label="Режим работы">
+        <button class="workspace-tab active" type="button" data-workspace-tab="repair">
+          Обработка фото
+        </button>
+        <button class="workspace-tab" type="button" data-workspace-tab="references">
+          Разметка эталонов
+        </button>
+      </nav>
+
       <form id="job-form" class="panel">
-        <section class="reference-loader">
+        <section id="reference-workspace" class="reference-loader" hidden>
           <div>
             <p class="eyebrow">Эталонные пары</p>
             <h2>Разметка образцов «до → идеальное после»</h2>
@@ -47,6 +56,17 @@
                 На исходнике ниже выделите деталь и отметьте дефекты, которые были
                 исправлены в этом результате.
               </p>
+              <fieldset class="reference-quality">
+                <legend>Тип образца</legend>
+                <label>
+                  <input type="radio" name="reference-quality" value="pixel_aligned">
+                  <span><strong>Полное совпадение</strong><small>Фон, контур и геометрия не изменились</small></span>
+                </label>
+                <label>
+                  <input type="radio" name="reference-quality" value="visual_reference" checked>
+                  <span><strong>Визуальный референс</strong><small>Ремонт нравится, но изображение немного поплыло</small></span>
+                </label>
+              </fieldset>
               <button id="save-reference-annotation" type="button">
                 Сохранить разметку в датасет
               </button>
@@ -54,7 +74,7 @@
           </div>
         </section>
 
-        <section class="upload-row">
+        <section class="upload-row repair-only">
           <label class="file-picker">
             <strong>Исходная фотография</strong>
             <span>PNG, JPEG или WebP до 25 МБ</span>
@@ -108,7 +128,7 @@
           </p>
         </section>
 
-        <details id="donor-panel" class="donor-panel">
+        <details id="donor-panel" class="donor-panel repair-only">
           <summary>Эксперимент: заменить деталь по хорошему фото-донору</summary>
           <p class="legend-note">
             Сначала выделите слой «Деталь» на исходной фотографии. Затем загрузите
@@ -149,7 +169,7 @@
           </div>
         </details>
 
-        <section class="controls">
+        <section class="controls repair-only">
           <button id="submit" type="submit" disabled>Обработать по этапам</button>
         </section>
         <p id="message" role="status"></p>
@@ -212,6 +232,6 @@
         </figure>
       </div>
     </dialog>
-    <script src="/assets/app.js?v=20261009-reference" defer></script>
+    <script src="/assets/app.js?v=20261009-reference-tabs" defer></script>
   </body>
 </html>

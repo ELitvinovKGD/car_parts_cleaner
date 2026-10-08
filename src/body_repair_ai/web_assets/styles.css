@@ -15,6 +15,9 @@ h2 { margin: 4px 0 0; }
 .subtitle { color: #9aa8b8; margin: 0; }
 .status { background: #12251f; border: 1px solid #23513f; border-radius: 999px; padding: 10px 14px; color: #a8ead1; font-size: 13px; }
 .status span { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #5ee0ad; margin-right: 7px; }
+.workspace-tabs { display: flex; gap: 8px; margin-top: 28px; padding: 6px; width: fit-content; border: 1px solid #273241; border-radius: 14px; background: rgba(14, 20, 28, .9); }
+.workspace-tab { background: transparent; color: #aeb9c6; border-color: transparent; }
+.workspace-tab.active { color: #06291d; background: #75e6bd; }
 .panel { margin-top: 28px; border: 1px solid #273241; background: rgba(19, 25, 34, .92); border-radius: 20px; padding: 24px; box-shadow: 0 24px 60px rgba(0, 0, 0, .25); }
 .comparison { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 .upload-row { display: flex; }
@@ -27,6 +30,12 @@ h2 { margin: 4px 0 0; }
 .reference-image-frame { aspect-ratio: 4 / 3; display: grid; place-items: center; overflow: hidden; }
 .reference-image-frame img { width: 100%; height: 100%; object-fit: contain; }
 .reference-target button { margin-top: 14px; }
+.reference-quality { display: grid; gap: 8px; margin: 16px 0 0; padding: 0; border: 0; }
+.reference-quality legend { margin-bottom: 8px; color: #dbe3ec; font-weight: 800; }
+.reference-quality label { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; padding: 12px; border: 1px solid #354253; border-radius: 12px; background: #111923; cursor: pointer; }
+.reference-quality input { margin-top: 3px; accent-color: #75e6bd; }
+.reference-quality span { display: grid; gap: 3px; }
+.reference-quality small { color: #8492a3; line-height: 1.35; }
 .file-picker { width: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; border: 1px dashed #3d4b5d; border-radius: 14px; background: #0e141c; cursor: pointer; padding: 18px; }
 .file-picker:hover { border-color: #75e6bd; }
 .file-picker span { color: #8190a2; font-size: 13px; }
@@ -97,6 +106,8 @@ button.secondary { background: transparent; color: #dbe3ec; }
 
 @media (max-width: 760px) {
   header { flex-direction: column; }
+  .workspace-tabs { width: 100%; }
+  .workspace-tab { flex: 1; padding: 0 10px; }
   .comparison { grid-template-columns: 1fr; }
   .detail-dialog { height: 96vh; padding: 12px; }
   .detail-heading { align-items: flex-start; }
