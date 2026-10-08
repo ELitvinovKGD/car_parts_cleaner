@@ -68,3 +68,21 @@ def test_defect_layers_are_clipped_to_part_boundary() -> None:
 
     assert masks.dent.getpixel((2, 2)) == 255
     assert masks.dent.getpixel((7, 7)) == 0
+
+
+def test_part_only_reference_annotation_is_supported() -> None:
+    size = (8, 8)
+    part = Image.new("L", size, color=255)
+    empty = Image.new("L", size, color=0)
+
+    masks = parse_layer_masks(
+        part=part,
+        dent=empty,
+        dirt=empty,
+        scratch=empty,
+        expected_size=size,
+        allow_empty=True,
+    )
+
+    assert masks.labels_present == ()
+    assert masks.editable.getbbox() is None

@@ -8,7 +8,7 @@ from body_repair_ai.config import Settings
 from body_repair_ai.domain import JobRecord, JobStatus, Operation
 from body_repair_ai.image_processing.crop import create_context_crop, restore_crop_to_canvas
 from body_repair_ai.image_processing.donor import transfer_donor_part
-from body_repair_ai.image_processing.masks import composite_result, prepare_masks
+from body_repair_ai.image_processing.masks import MaskBundle, composite_result, prepare_masks
 from body_repair_ai.image_processing.semantic import SemanticMasks
 from body_repair_ai.image_processing.tiles import split_mask_into_tiles
 from body_repair_ai.inference import InferenceEngine, InferenceRequest
@@ -135,6 +135,7 @@ class RestorationService:
 
         original = original.convert("RGB")
         stages = [
+            (Operation.GENERAL_RETOUCH, semantic_masks.retouch),
             (Operation.REMOVE_DENT, semantic_masks.dent),
             (Operation.REMOVE_SCRATCH, semantic_masks.scratch),
             (Operation.REMOVE_DIRT, semantic_masks.dirt),
@@ -260,12 +261,20 @@ class RestorationService:
         if reference_quality == "pixel_aligned" and before.size != approved_after.size:
             raise ValueError("Before and approved-after images must have equal sizes.")
 
-        combined_masks = prepare_masks(
-            semantic_masks.editable,
-            expected_size=before.size,
-            threshold=self.settings.mask_threshold,
-            feather_radius=self.settings.mask_feather_radius,
-        )
+        if semantic_masks.editable.getbbox():
+            combined_masks = prepare_masks(
+                semantic_masks.editable,
+                expected_size=before.size,
+                threshold=self.settings.mask_threshold,
+                feather_radius=self.settings.mask_feather_radius,
+            )
+        else:
+            empty_mask = Image.new("L", before.size, color=0)
+            combined_masks = MaskBundle(
+                hard=empty_mask,
+                soft=empty_mask.copy(),
+                bounding_box=(0, 0, 0, 0),
+            )
         metadata = self.store.save_reference_annotations(
             sample_id,
             semantic_masks,
@@ -293,10 +302,12 @@ class RestorationService:
                 raise ValueError("Reference dataset job has incomplete mask paths.")
             combined_masks.hard.save(job.hard_mask_path, format="PNG")
             combined_masks.soft.save(job.soft_mask_path, format="PNG")
-            for name in ("part", "dent", "scratch", "dirt"):
+            annotation_dir = self.store.root / "annotations" / str(job.id)
+            for name in ("part", "dent", "scratch", "dirt", "retouch"):
                 path = job.layer_mask_paths.get(name)
                 if path is None:
-                    raise ValueError("Reference dataset job has incomplete layer paths.")
+                    path = annotation_dir / f"{name}.png"
+                    job.layer_mask_paths[name] = path
                 getattr(semantic_masks, name).save(path, format="PNG")
 
         collection = (

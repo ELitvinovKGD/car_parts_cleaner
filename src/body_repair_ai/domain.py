@@ -12,6 +12,7 @@ class Operation(StrEnum):
     MIXED_REPAIR = "mixed_repair"
     DONOR_TRANSFER = "donor_transfer"
     EXTERNAL_REFERENCE = "external_reference"
+    GENERAL_RETOUCH = "general_retouch"
     REMOVE_DENT = "remove_dent"
     REMOVE_DIRT = "remove_dirt"
     REMOVE_SCRATCH = "remove_scratch"

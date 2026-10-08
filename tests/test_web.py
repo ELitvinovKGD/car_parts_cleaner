@@ -111,7 +111,13 @@ def test_layered_job_saves_independent_masks_and_stages(tmp_path: Path) -> None:
     assert response.status_code == 201
     payload = response.json()
     assert payload["completed_stages"] == ["remove_dent", "remove_scratch"]
-    assert set(payload["layer_urls"]) == {"part", "dent", "scratch", "dirt"}
+    assert set(payload["layer_urls"]) == {
+        "part",
+        "dent",
+        "scratch",
+        "dirt",
+        "retouch",
+    }
     assert client.get(payload["layer_urls"]["dent"]).status_code == 200
 
 
@@ -161,6 +167,7 @@ def test_reference_pair_can_be_annotated_and_imported(tmp_path: Path) -> None:
             "same_size": True,
             "annotated": False,
             "reference_quality": None,
+            "annotation_level": None,
         }
     ]
 
@@ -196,6 +203,7 @@ def test_reference_pair_can_be_annotated_and_imported(tmp_path: Path) -> None:
     listed = client.get("/api/references").json()["items"][0]
     assert listed["annotated"] is True
     assert listed["reference_quality"] == "visual_reference"
+    assert listed["annotation_level"] == "detailed"
 
     reclassified = client.post(
         "/api/references/black-bumper/annotations",
@@ -245,3 +253,75 @@ def test_visual_reference_allows_a_different_target_size(tmp_path: Path) -> None
         files=files,
     )
     assert exact.status_code == 422
+
+
+def test_reference_auto_mask_can_be_saved_as_general_retouch(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    sample_dir = data_dir / "references" / "gold-bumper"
+    sample_dir.mkdir(parents=True)
+    before = Image.new("RGB", (24, 24), (20, 20, 20))
+    after = before.copy()
+    for x in range(8, 16):
+        for y in range(8, 16):
+            after.putpixel((x, y), (90, 90, 90))
+    before.save(sample_dir / "before.png")
+    after.save(sample_dir / "approved_after.png")
+    client = TestClient(
+        create_app(Settings(data_dir=data_dir, inference_backend="mock"))
+    )
+
+    auto_mask = client.post(
+        "/api/references/gold-bumper/auto-mask",
+        files={"part_mask": ("part.png", mask_bytes(filled=True), "image/png")},
+    )
+
+    assert auto_mask.status_code == 200
+    generated_mask = Image.open(BytesIO(auto_mask.content))
+    assert generated_mask.getbbox() is not None
+
+    saved = client.post(
+        "/api/references/gold-bumper/annotations",
+        data={"reference_quality": "pixel_aligned"},
+        files={
+            "part_mask": ("part.png", mask_bytes(filled=True), "image/png"),
+            "dent_mask": ("dent.png", mask_bytes(), "image/png"),
+            "scratch_mask": ("scratch.png", mask_bytes(), "image/png"),
+            "dirt_mask": ("dirt.png", mask_bytes(), "image/png"),
+            "retouch_mask": ("retouch.png", auto_mask.content, "image/png"),
+        },
+    )
+
+    assert saved.status_code == 200
+    metadata = (sample_dir / "metadata.json").read_text(encoding="utf-8")
+    assert '"annotation_level": "general"' in metadata
+    assert (sample_dir / "retouch_mask.png").is_file()
+    assert client.get("/api/references").json()["items"][0]["annotation_level"] == "general"
+
+
+def test_reference_can_be_saved_with_part_mask_only(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    sample_dir = data_dir / "references" / "part-only"
+    sample_dir.mkdir(parents=True)
+    Image.new("RGB", (24, 24), (20, 20, 20)).save(sample_dir / "before.png")
+    Image.new("RGB", (24, 24), (30, 30, 30)).save(
+        sample_dir / "approved_after.png"
+    )
+    client = TestClient(
+        create_app(Settings(data_dir=data_dir, inference_backend="mock"))
+    )
+
+    response = client.post(
+        "/api/references/part-only/annotations",
+        data={"reference_quality": "pixel_aligned"},
+        files={
+            "part_mask": ("part.png", mask_bytes(filled=True), "image/png"),
+            "dent_mask": ("dent.png", mask_bytes(), "image/png"),
+            "scratch_mask": ("scratch.png", mask_bytes(), "image/png"),
+            "dirt_mask": ("dirt.png", mask_bytes(), "image/png"),
+        },
+    )
+
+    assert response.status_code == 200
+    job_id = response.json()["dataset_job_id"]
+    assert (data_dir / "annotations" / job_id / "mask_hard.png").is_file()
+    assert client.get("/api/references").json()["items"][0]["annotation_level"] == "part_only"

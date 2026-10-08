@@ -19,12 +19,13 @@ class SemanticMasks:
     dent: Image.Image
     dirt: Image.Image
     scratch: Image.Image
+    retouch: Image.Image
     editable: Image.Image
 
     @property
     def labels_present(self) -> tuple[str, ...]:
         labels = []
-        for name in ("dent", "dirt", "scratch"):
+        for name in ("dent", "dirt", "scratch", "retouch"):
             if np.any(np.asarray(getattr(self, name))):
                 labels.append(name)
         return tuple(labels)
@@ -41,15 +42,23 @@ def parse_layer_masks(
     dirt: Image.Image,
     scratch: Image.Image,
     expected_size: tuple[int, int],
+    retouch: Image.Image | None = None,
     threshold: int = 127,
+    allow_empty: bool = False,
 ) -> SemanticMasks:
-    """Normalize four independent grayscale annotation layers.
+    """Normalize independent grayscale annotation layers.
 
     Layers deliberately remain independent: a dirty dent may be present in both
     masks without one annotation destroying the other.
     """
 
-    source_layers = {"part": part, "dent": dent, "dirt": dirt, "scratch": scratch}
+    source_layers = {
+        "part": part,
+        "dent": dent,
+        "dirt": dirt,
+        "scratch": scratch,
+        "retouch": retouch or Image.new("L", expected_size, color=0),
+    }
     conditions: dict[str, np.ndarray] = {}
     for name, image in source_layers.items():
         if image.size != expected_size:
@@ -63,16 +72,22 @@ def parse_layer_masks(
 
     # The part layer is the hard safety boundary. Defect strokes outside it are
     # clipped so the background and neighbouring panels remain protected.
-    for name in ("dent", "dirt", "scratch"):
+    for name in ("dent", "dirt", "scratch", "retouch"):
         conditions[name] &= conditions["part"]
-    editable_condition = conditions["dent"] | conditions["dirt"] | conditions["scratch"]
-    if not np.any(editable_condition):
+    editable_condition = (
+        conditions["dent"]
+        | conditions["dirt"]
+        | conditions["scratch"]
+        | conditions["retouch"]
+    )
+    if not allow_empty and not np.any(editable_condition):
         raise ValueError("Mark at least one defect inside the selected body part.")
     return SemanticMasks(
         part=_binary_image(conditions["part"]),
         dent=_binary_image(conditions["dent"]),
         dirt=_binary_image(conditions["dirt"]),
         scratch=_binary_image(conditions["scratch"]),
+        retouch=_binary_image(conditions["retouch"]),
         editable=_binary_image(editable_condition),
     )
 
@@ -112,5 +127,6 @@ def parse_semantic_mask(
         dent=_binary_image(dent_condition),
         dirt=_binary_image(dirt_condition),
         scratch=_binary_image(scratch_condition),
+        retouch=Image.new("L", annotation.size, color=0),
         editable=_binary_image(editable_condition),
     )

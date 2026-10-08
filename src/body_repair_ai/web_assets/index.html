@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Body Repair AI</title>
-    <link rel="stylesheet" href="/assets/styles.css?v=20261009-workspace-tabs-v2">
+    <link rel="stylesheet" href="/assets/styles.css?v=20261009-auto-mask">
   </head>
   <body>
     <main class="shell">
@@ -67,9 +67,18 @@
                   <span><strong>Визуальный референс</strong><small>Ремонт нравится, но изображение немного поплыло</small></span>
                 </label>
               </fieldset>
-              <button id="save-reference-annotation" type="button">
-                Сохранить разметку в датасет
-              </button>
+              <div class="reference-actions">
+                <button id="auto-change-mask" class="secondary" type="button" disabled>
+                  Найти изменения автоматически
+                </button>
+                <button id="save-reference-annotation" type="button">
+                  Сохранить разметку в датасет
+                </button>
+              </div>
+              <p class="legend-note">
+                Автомаска доступна для совпадающих изображений после выделения детали.
+                Её можно исправить обычной кистью или ластиком.
+              </p>
             </div>
           </div>
           <div id="reference-editor-slot"></div>
@@ -91,6 +100,9 @@
               <span class="tool-label">Независимый слой</span>
               <button type="button" class="layer-tool active" data-layer="part">
                 <i class="swatch part"></i> Деталь
+              </button>
+              <button type="button" class="layer-tool" data-layer="retouch">
+                <i class="swatch retouch"></i> Общая ретушь
               </button>
               <button type="button" class="layer-tool" data-layer="dent">
                 <i class="swatch dent"></i> Вмятина
@@ -237,6 +249,6 @@
         </figure>
       </div>
     </dialog>
-    <script src="/assets/app.js?v=20261009-workspace-tabs-v2" defer></script>
+    <script src="/assets/app.js?v=20261009-auto-mask" defer></script>
   </body>
 </html>

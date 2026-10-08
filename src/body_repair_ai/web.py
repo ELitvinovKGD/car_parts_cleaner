@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from body_repair_ai.config import Settings, get_settings
 from body_repair_ai.domain import JobRecord, Operation
+from body_repair_ai.image_processing.difference import create_change_mask
 from body_repair_ai.image_processing.semantic import parse_layer_masks, parse_semantic_mask
 from body_repair_ai.inference import ComfyUIEngine, InferenceEngine, MockInferenceEngine
 from body_repair_ai.service import RestorationService
@@ -152,6 +153,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         dent_mask: Annotated[UploadFile | None, File()] = None,
         dirt_mask: Annotated[UploadFile | None, File()] = None,
         scratch_mask: Annotated[UploadFile | None, File()] = None,
+        retouch_mask: Annotated[UploadFile | None, File()] = None,
         operation: Annotated[Operation, Form()] = Operation.MIXED_REPAIR,
     ) -> dict[str, object]:
         original_image = await _read_image(image, "Image")
@@ -169,6 +171,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     dirt=dirt_image,
                     scratch=scratch_image,
                     expected_size=original_image.size,
+                    retouch=(
+                        await _read_image(retouch_mask, "General retouch mask")
+                        if retouch_mask is not None
+                        else None
+                    ),
                 )
                 job = service.process_layers(original_image, semantic_masks)
             elif annotation is not None:
@@ -250,6 +257,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="Reference artifact not found.") from None
         return FileResponse(path)
 
+    @app.post("/api/references/{sample_id}/auto-mask", response_class=Response)
+    async def create_reference_auto_mask(
+        sample_id: str,
+        part_mask: Annotated[UploadFile, File()],
+    ) -> Response:
+        try:
+            before_path = store.reference_artifact_path(sample_id, "before")
+            after_path = store.reference_artifact_path(sample_id, "approved_after")
+            with Image.open(before_path) as source_image, Image.open(after_path) as target_image:
+                before = source_image.convert("RGB").copy()
+                after = target_image.convert("RGB").copy()
+            part = await _read_image(part_mask, "Part mask")
+            auto_mask = create_change_mask(before, after, part)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="Reference sample not found.") from None
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        output = BytesIO()
+        auto_mask.save(output, format="PNG")
+        return Response(content=output.getvalue(), media_type="image/png")
+
     @app.post("/api/references/{sample_id}/annotations")
     async def save_reference_annotations(
         sample_id: str,
@@ -258,6 +286,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         dent_mask: Annotated[UploadFile, File()],
         dirt_mask: Annotated[UploadFile, File()],
         scratch_mask: Annotated[UploadFile, File()],
+        retouch_mask: Annotated[UploadFile | None, File()] = None,
     ) -> dict[str, object]:
         try:
             before_path = store.reference_artifact_path(sample_id, "before")
@@ -273,6 +302,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 dirt=dirt_image,
                 scratch=scratch_image,
                 expected_size=expected_size,
+                retouch=(
+                    await _read_image(retouch_mask, "General retouch mask")
+                    if retouch_mask is not None
+                    else None
+                ),
+                allow_empty=True,
             )
             job = service.import_reference(
                 sample_id,

@@ -76,7 +76,7 @@ class DatasetStore:
         self.save_inputs(job, original, masks)
         annotation_dir = self.root / "annotations" / str(job.id)
         layer_paths: dict[str, Path] = {}
-        for name in ("part", "dent", "scratch", "dirt"):
+        for name in ("part", "dent", "scratch", "dirt", "retouch"):
             path = annotation_dir / f"{name}.png"
             getattr(semantic_masks, name).convert("L").save(path, format="PNG")
             layer_paths[name] = path
@@ -171,8 +171,13 @@ class DatasetStore:
             reference_quality = metadata.get("reference_quality")
             if reference_quality not in {"pixel_aligned", "visual_reference"}:
                 reference_quality = None
+            annotation_level = metadata.get("annotation_level")
+            if annotation_level not in {"part_only", "general", "detailed"}:
+                annotation_level = None
             mask_names = ("part_mask", "dent_mask", "scratch_mask", "dirt_mask")
-            annotated = all((path / f"{name}.png").is_file() for name in mask_names)
+            annotated = metadata.get("annotated") is True or all(
+                (path / f"{name}.png").is_file() for name in mask_names
+            )
             items.append(
                 {
                     "id": path.name,
@@ -181,6 +186,7 @@ class DatasetStore:
                     "same_size": before_size == after_size,
                     "annotated": annotated,
                     "reference_quality": reference_quality,
+                    "annotation_level": annotation_level,
                 }
             )
         return items
@@ -193,6 +199,7 @@ class DatasetStore:
             "dent_mask": "dent_mask.png",
             "scratch_mask": "scratch_mask.png",
             "dirt_mask": "dirt_mask.png",
+            "retouch_mask": "retouch_mask.png",
             "protect_mask": "protect_mask.png",
             "editable_mask": "editable_mask.png",
             "metadata": "metadata.json",
@@ -218,7 +225,7 @@ class DatasetStore:
         sample_dir = self._reference_dir(sample_id)
         if not sample_dir.is_dir():
             raise FileNotFoundError(sample_dir)
-        for name in ("part", "dent", "scratch", "dirt"):
+        for name in ("part", "dent", "scratch", "dirt", "retouch"):
             getattr(masks, name).convert("L").save(
                 sample_dir / f"{name}_mask.png",
                 format="PNG",
@@ -231,6 +238,14 @@ class DatasetStore:
         metadata: dict[str, object] = {}
         if metadata_path.is_file():
             metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        labels_present = list(masks.labels_present)
+        annotation_level = (
+            "part_only"
+            if not labels_present
+            else "general"
+            if labels_present == ["retouch"]
+            else "detailed"
+        )
         metadata.update(
             {
                 "id": sample_id,
@@ -241,7 +256,8 @@ class DatasetStore:
                 "target": "approved_after.png",
                 "image_size": list(image_size),
                 "reference_quality": reference_quality,
-                "labels_present": list(masks.labels_present),
+                "labels_present": labels_present,
+                "annotation_level": annotation_level,
                 "annotated": True,
                 "updated_at": datetime.now(UTC).isoformat(),
             }

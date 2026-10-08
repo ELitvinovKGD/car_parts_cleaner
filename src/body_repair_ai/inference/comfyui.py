@@ -12,6 +12,12 @@ from body_repair_ai.domain import Operation
 from body_repair_ai.inference.base import InferenceRequest
 
 OPERATION_PROMPTS = {
+    Operation.GENERAL_RETOUCH: (
+        "Photorealistic conservative local retouch of the exact same used automotive part. "
+        "Improve only the masked area to match the approved clean appearance. Preserve geometry, "
+        "silhouette, body lines, holes, fasteners, material, paint, texture, lighting, reflections "
+        "and realistic signs of use."
+    ),
     Operation.MIXED_REPAIR: (
         "Photorealistic local retouch of the exact same used automotive part. Edit only the "
         "masked defects: gently remove dirt, visible scratches, scuffs and shallow dents. "
@@ -48,6 +54,7 @@ NEGATIVE_PROMPT = (
 )
 
 OPERATION_DENOISE = {
+    Operation.GENERAL_RETOUCH: 0.34,
     Operation.MIXED_REPAIR: 0.36,
     Operation.REMOVE_DENT: 0.38,
     Operation.REMOVE_DIRT: 0.32,

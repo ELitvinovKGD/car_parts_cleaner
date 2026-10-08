@@ -25,6 +25,7 @@ const donorSubmit = document.querySelector("#donor-submit");
 const referenceSelect = document.querySelector("#reference-select");
 const loadReferenceButton = document.querySelector("#load-reference");
 const saveReferenceButton = document.querySelector("#save-reference-annotation");
+const autoChangeMaskButton = document.querySelector("#auto-change-mask");
 const referenceTarget = document.querySelector("#reference-target");
 const referenceWorkspace = document.querySelector("#reference-workspace");
 const repairWorkspace = document.querySelector("#repair-workspace");
@@ -34,11 +35,12 @@ const workspaceTabs = [...document.querySelectorAll("[data-workspace-tab]")];
 
 const layerDefinitions = {
   part: { label: "деталь", color: "rgba(0, 183, 255, 0.42)" },
+  retouch: { label: "общая ретушь", color: "rgba(255, 138, 61, 0.55)" },
   dent: { label: "вмятина", color: "rgba(255, 0, 0, 0.55)" },
   scratch: { label: "царапина", color: "rgba(255, 0, 255, 0.58)" },
   dirt: { label: "грязь", color: "rgba(255, 230, 0, 0.55)" },
 };
-const layerOrder = ["part", "dirt", "dent", "scratch"];
+const layerOrder = ["part", "retouch", "dirt", "dent", "scratch"];
 const layerCanvases = Object.fromEntries(Object.keys(layerDefinitions).map((name) => {
   const canvas = document.createElement("canvas");
   return [name, canvas];
@@ -69,6 +71,11 @@ const referenceQualityLabels = {
   pixel_aligned: "полное совпадение",
   visual_reference: "визуальный референс",
 };
+const annotationLevelLabels = {
+  part_only: "только деталь",
+  general: "автомаска/общая ретушь",
+  detailed: "подробные дефекты",
+};
 
 function selectReferenceQuality(value) {
   const quality = value || "visual_reference";
@@ -93,6 +100,7 @@ function switchWorkspace(workspace) {
   fileInput.value = "";
   editor.hidden = true;
   referenceTarget.hidden = true;
+  autoChangeMaskButton.disabled = true;
   resultPanel.hidden = true;
   submit.disabled = true;
   message.textContent = workspace === "references"
@@ -628,8 +636,11 @@ async function refreshReferenceList(preferredId = null) {
       const quality = item.reference_quality
         ? ` — ${referenceQualityLabels[item.reference_quality]}`
         : "";
+      const annotationLevel = item.annotation_level
+        ? ` — ${annotationLevelLabels[item.annotation_level]}`
+        : "";
       const sizeWarning = item.same_size ? "" : " — размеры не совпадают";
-      option.textContent = `${item.id}${state}${quality}${sizeWarning}`;
+      option.textContent = `${item.id}${state}${quality}${annotationLevel}${sizeWarning}`;
       referenceSelect.appendChild(option);
     }
     const selectedId = preferredId || activeReferenceId;
@@ -697,6 +708,7 @@ loadReferenceButton.addEventListener("click", async () => {
       `/api/references/${encodedId}/artifacts/approved_after?v=${Date.now()}`;
     referenceTarget.hidden = false;
     saveReferenceButton.disabled = false;
+    autoChangeMaskButton.disabled = !item.same_size;
     const exactQualityInput = document.querySelector(
       'input[name="reference-quality"][value="pixel_aligned"]',
     );
@@ -710,6 +722,7 @@ loadReferenceButton.addEventListener("click", async () => {
         const maskResponse = await fetch(
           `/api/references/${encodedId}/artifacts/${name}_mask?v=${Date.now()}`,
         );
+        if (!maskResponse.ok && name === "retouch") continue;
         if (!maskResponse.ok) throw new Error(`Не удалось загрузить сохранённый слой ${name}.`);
         await drawMaskBlobToLayer(name, await maskResponse.blob());
       }
@@ -726,14 +739,49 @@ loadReferenceButton.addEventListener("click", async () => {
   }
 });
 
+autoChangeMaskButton.addEventListener("click", async () => {
+  if (!activeReferenceId) return;
+  if (!layerHasContent("part")) {
+    message.textContent = "Сначала выделите слой «Деталь» через SAM 2 или кистью.";
+    return;
+  }
+  const item = referenceItems.find((candidate) => candidate.id === activeReferenceId);
+  if (!item?.same_size) {
+    message.textContent = "Автомаска работает только для изображений одинакового размера.";
+    return;
+  }
+  autoChangeMaskButton.disabled = true;
+  message.textContent = "Сравниваем «до» и «после» и строим маску изменений…";
+  try {
+    const body = new FormData();
+    body.append("part_mask", await layerBlob("part"), "part.png");
+    const encodedId = encodeURIComponent(activeReferenceId);
+    const response = await fetch(`/api/references/${encodedId}/auto-mask`, {
+      method: "POST",
+      body,
+    });
+    if (!response.ok) {
+      const payload = await response.json();
+      throw new Error(payload.detail || "Не удалось построить автоматическую маску.");
+    }
+    await drawMaskBlobToLayer("retouch", await response.blob());
+    activeLayer = "retouch";
+    document.querySelectorAll(".layer-tool").forEach((button) => {
+      button.classList.toggle("active", button.dataset.layer === "retouch");
+    });
+    renderOverlay();
+    message.textContent = "Автомаска добавлена в слой «Общая ретушь». Проверьте её и сохраните эталон.";
+  } catch (error) {
+    message.textContent = error.message;
+  } finally {
+    autoChangeMaskButton.disabled = false;
+  }
+});
+
 saveReferenceButton.addEventListener("click", async () => {
   if (!activeReferenceId) return;
   if (!layerHasContent("part")) {
     message.textContent = "Сначала выделите слой «Деталь».";
-    return;
-  }
-  if (!["dent", "scratch", "dirt"].some(layerHasContent)) {
-    message.textContent = "Отметьте хотя бы один исправленный дефект.";
     return;
   }
   saveReferenceButton.disabled = true;

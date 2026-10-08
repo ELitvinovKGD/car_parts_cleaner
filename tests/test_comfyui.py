@@ -60,6 +60,7 @@ def test_sdxl_workflow_contains_required_placeholders() -> None:
 
 def test_operation_prompts_prioritize_geometry_preservation() -> None:
     assert set(OPERATION_PROMPTS) == {
+        Operation.GENERAL_RETOUCH,
         Operation.MIXED_REPAIR,
         Operation.REMOVE_DENT,
         Operation.REMOVE_DIRT,
