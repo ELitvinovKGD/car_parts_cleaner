@@ -30,6 +30,21 @@ def mask_bytes(*, filled: bool = False) -> bytes:
     return output.getvalue()
 
 
+def test_index_separates_processing_and_reference_workspaces(tmp_path: Path) -> None:
+    client = TestClient(
+        create_app(Settings(data_dir=tmp_path / "data", inference_backend="mock"))
+    )
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert 'id="repair-workspace"' in response.text
+    assert 'id="reference-workspace"' in response.text
+    assert 'id="repair-editor-slot"' in response.text
+    assert 'id="reference-editor-slot"' in response.text
+    assert 'id="donor-panel" class="donor-panel" hidden' in response.text
+
+
 def test_create_job_and_accept_result(tmp_path: Path) -> None:
     app = create_app(Settings(data_dir=tmp_path / "data", inference_backend="mock"))
     client = TestClient(app)

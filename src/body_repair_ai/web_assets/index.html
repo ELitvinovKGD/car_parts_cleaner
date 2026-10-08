@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Body Repair AI</title>
-    <link rel="stylesheet" href="/assets/styles.css?v=20261009-reference-tabs">
+    <link rel="stylesheet" href="/assets/styles.css?v=20261009-workspace-tabs-v2">
   </head>
   <body>
     <main class="shell">
@@ -72,17 +72,20 @@
               </button>
             </div>
           </div>
+          <div id="reference-editor-slot"></div>
         </section>
 
-        <section class="upload-row repair-only">
-          <label class="file-picker">
-            <strong>Исходная фотография</strong>
-            <span>PNG, JPEG или WebP до 25 МБ</span>
-            <input id="image" name="image" type="file" accept="image/png,image/jpeg,image/webp" required>
-          </label>
-        </section>
+        <section id="repair-workspace">
+          <section class="upload-row">
+            <label class="file-picker">
+              <strong>Исходная фотография</strong>
+              <span>PNG, JPEG или WebP до 25 МБ</span>
+              <input id="image" name="image" type="file" accept="image/png,image/jpeg,image/webp" required>
+            </label>
+          </section>
 
-        <section id="editor" class="editor" hidden>
+          <div id="repair-editor-slot">
+            <section id="editor" class="editor" hidden>
           <div class="toolbar">
             <div class="tool-group">
               <span class="tool-label">Независимый слой</span>
@@ -126,9 +129,10 @@
             Исправьте результат кистью и ластиком. Слои хранятся независимо и могут
             пересекаться, не стирая друг друга.
           </p>
-        </section>
+            </section>
+          </div>
 
-        <details id="donor-panel" class="donor-panel repair-only">
+        <details id="donor-panel" class="donor-panel" hidden aria-hidden="true">
           <summary>Эксперимент: заменить деталь по хорошему фото-донору</summary>
           <p class="legend-note">
             Сначала выделите слой «Деталь» на исходной фотографии. Затем загрузите
@@ -169,8 +173,9 @@
           </div>
         </details>
 
-        <section class="controls repair-only">
-          <button id="submit" type="submit" disabled>Обработать по этапам</button>
+          <section class="controls">
+            <button id="submit" type="submit" disabled>Обработать по этапам</button>
+          </section>
         </section>
         <p id="message" role="status"></p>
       </form>
@@ -232,6 +237,6 @@
         </figure>
       </div>
     </dialog>
-    <script src="/assets/app.js?v=20261009-reference-tabs" defer></script>
+    <script src="/assets/app.js?v=20261009-workspace-tabs-v2" defer></script>
   </body>
 </html>

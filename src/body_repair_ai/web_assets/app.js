@@ -27,8 +27,10 @@ const loadReferenceButton = document.querySelector("#load-reference");
 const saveReferenceButton = document.querySelector("#save-reference-annotation");
 const referenceTarget = document.querySelector("#reference-target");
 const referenceWorkspace = document.querySelector("#reference-workspace");
+const repairWorkspace = document.querySelector("#repair-workspace");
+const repairEditorSlot = document.querySelector("#repair-editor-slot");
+const referenceEditorSlot = document.querySelector("#reference-editor-slot");
 const workspaceTabs = [...document.querySelectorAll("[data-workspace-tab]")];
-const repairOnlyElements = [...document.querySelectorAll(".repair-only")];
 
 const layerDefinitions = {
   part: { label: "деталь", color: "rgba(0, 183, 255, 0.42)" },
@@ -61,7 +63,7 @@ let donorSamStart = null;
 let donorSamBusy = false;
 let referenceItems = [];
 let activeReferenceId = null;
-let activeWorkspace = "repair";
+let activeWorkspace = null;
 
 const referenceQualityLabels = {
   pixel_aligned: "полное совпадение",
@@ -80,11 +82,12 @@ function switchWorkspace(workspace) {
   activeWorkspace = workspace;
   workspaceTabs.forEach((button) => {
     button.classList.toggle("active", button.dataset.workspaceTab === workspace);
+    button.setAttribute("aria-selected", String(button.dataset.workspaceTab === workspace));
   });
   referenceWorkspace.hidden = workspace !== "references";
-  repairOnlyElements.forEach((element) => {
-    element.hidden = workspace !== "repair";
-  });
+  repairWorkspace.hidden = workspace !== "repair";
+  const editorSlot = workspace === "references" ? referenceEditorSlot : repairEditorSlot;
+  editorSlot.appendChild(editor);
   sourceFile = null;
   activeReferenceId = null;
   fileInput.value = "";
@@ -762,7 +765,8 @@ saveReferenceButton.addEventListener("click", async () => {
   }
 });
 
-refreshReferenceList();
+const requestedWorkspace = new URLSearchParams(window.location.search).get("workspace");
+switchWorkspace(requestedWorkspace === "references" ? "references" : "repair");
 
 function renderDonorOverlay() {
   donorMaskContext.clearRect(0, 0, donorMaskCanvas.width, donorMaskCanvas.height);

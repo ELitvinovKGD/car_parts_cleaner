@@ -8,7 +8,8 @@
 
 Будут запущены:
 
-- интерфейс: <http://127.0.0.1:8000/?version=reference-tabs>
+- обработка фото: <http://127.0.0.1:8000/?version=workspace-tabs-v2>
+- разметка эталонов: <http://127.0.0.1:8000/?version=workspace-tabs-v2&workspace=references>
 - ComfyUI: <http://127.0.0.1:8188>
 - SAM 2: <http://127.0.0.1:8190/health>
 
